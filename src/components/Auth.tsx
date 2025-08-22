@@ -235,8 +235,6 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
         try { loadSessionFromStorage() } catch { }
     }, [])
 
-    // ...existing code...
-
     async function hmacSha256(keyBytes: Uint8Array, data: Uint8Array) {
         const cryptoKey = await crypto.subtle.importKey('raw', keyBytes.buffer as ArrayBuffer, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
         return await crypto.subtle.sign('HMAC', cryptoKey, data.buffer as ArrayBuffer)
@@ -296,12 +294,12 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
                 </div>
             )}
             {recoveryKey && mode === 'register' && (
-                <div className="mt-4 p-3 bg-yellow-50 border rounded">
-                    <strong>recovery key (save this now):</strong>
-                    <div className="mt-2 font-mono break-all p-2 bg-white rounded">{recoveryKey}</div>
-                    <p className="text-xs text-slate-600 mt-2">this one-time recovery key can be used to regain access to encrypted notes if you forget your password. store it safely; it will not be shown again.</p>
+                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded">
+                    <strong className="text-yellow-800 dark:text-yellow-200">recovery key (save this now):</strong>
+                    <div className="mt-2 font-mono break-all p-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded ring-1 ring-slate-100/60 dark:ring-slate-800/60">{recoveryKey}</div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">this one-time recovery key can be used to regain access to encrypted notes if you forget your password. store it safely; it will not be shown again.</p>
                     <div className="mt-2 flex gap-2">
-                        <button className="px-3 py-1 bg-slate-200 rounded" onClick={() => copyRecoveryKey()}>{copied ? 'copied' : 'copy recovery key'}</button>
+                        <button className="px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded" onClick={() => copyRecoveryKey()}>{copied ? 'copied' : 'copy recovery key'}</button>
                         <button className="px-3 py-1 bg-green-500 text-white rounded" onClick={() => finishRegistration()}>finish</button>
                     </div>
                 </div>
