@@ -1,0 +1,19 @@
+name = "thoughts"
+compatibility_date = "2025-08-21"
+compatibility_flags = ["nodejs_compat"]
+main = "worker/index.ts"
+
+[assets]
+directory = "./dist"
+
+[dev]
+# Local D1 binding will be added by the developer when needed
+
+[vars]
+# add worker environment variables via `wrangler secret` or Cloudflare dashboard
+
+[[d1_databases]]
+binding = "DB"
+database_name = "thoughts"
+database_id = "05a06755-4224-4867-adb4-066c97f79db2"
+preview_database_id = "c371d1e7-5c52-4a79-9871-c106c0f7a76d"

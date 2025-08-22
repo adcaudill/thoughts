@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* CSS variables for light and dark palettes. We keep a neutral grey palette for dark mode. */
+:root {
+    --bg: 255 255 255;
+    /* rgb as separate values for use with opacity */
+    --muted: 148 163 184;
+    /* slate-400 */
+    --text: 15 23 42;
+    /* slate-900 */
+    --surface: 255 255 255;
+    /* cards and panels */
+    --border: 226 232 240;
+    /* slate-100 */
+    --accent: 56 189 248;
+    /* sky-400 */
+    --pill-text-dark: 15 23 42;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: 17 24 39;
+        /* slate-900 */
+        --muted: 120 130 145;
+        /* slightly desaturated gray for muted text */
+        --text: 226 232 240;
+        /* slate-200 */
+        --surface: 30 41 59;
+        /* slate-800 */
+        --border: 63 63 70;
+        /* soft border */
+        --accent: 140 146 158;
+        /* neutral gray accent (no blue) */
+        --pill-text-dark: 17 24 39;
+    }
+
+    /* Improve default text colors for Tailwind utilities that use text-slate-900 etc. */
+    .text-slate-900 {
+        color: rgb(var(--text));
+    }
+
+    .text-slate-500 {
+        color: rgba(var(--muted), 1);
+    }
+
+    .text-slate-700 {
+        color: rgba(var(--muted), 1);
+    }
+
+    .text-slate-600 {
+        color: rgba(var(--muted), 1);
+    }
+
+    .bg-white {
+        background-color: rgb(var(--surface));
+    }
+
+    .bg-gray-50 {
+        background-color: rgb(var(--bg));
+    }
+
+    .bg-slate-50 {
+        background-color: rgba(var(--border), 1);
+    }
+
+    /* Make the 'bg-slate-100' utility readable when used for active pills/buttons */
+    .bg-slate-100 {
+        /* light pill so it stands out on a dark surface */
+        background-color: rgba(255, 255, 255, 0.12);
+        /* dark text for readability on the light pill */
+        color: rgb(var(--pill-text-dark));
+    }
+
+    .border {
+        border-color: rgba(var(--border), 1);
+    }
+
+    .shadow {
+        /* soften shadows in dark mode */
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    }
+
+    .prose {
+        color: rgb(var(--text));
+    }
+
+    .ql-toolbar,
+    .ql-container {
+        background-color: rgb(var(--surface));
+        color: rgb(var(--text));
+    }
+
+    /* Stronger pill appearance for active auth selector */
+    .bg-slate-100.auth-pill {
+        background-color: rgba(255, 255, 255, 0.14) !important;
+        color: rgb(var(--pill-text-dark)) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6) inset, 0 2px 6px rgba(0, 0, 0, 0.45);
+        font-weight: 600;
+    }
+
+    /* Sidebar hover: make hover background subtle and ensure hovered text is high-contrast */
+    /* Target Tailwind generated class name (colon escaped) for dark-mode override */
+    .hover\:bg-slate-50:hover {
+        background-color: rgba(255, 255, 255, 0.04) !important;
+        /* subtle light band */
+    }
+
+    /* When list items using text-slate-700 are hovered, force a brighter text color for contrast */
+    .space-y-2.text-slate-700 li:hover {
+        color: rgb(var(--text)) !important;
+    }
+}
+
+/* Map a few light-mode classes to variables for consistency */
+.bg-white {
+    background-color: rgb(var(--surface));
+}
+
+.bg-gray-50 {
+    background-color: rgb(var(--bg));
+}
+
+.text-slate-900 {
+    color: rgb(var(--text));
+}
+
+.text-slate-500 {
+    color: rgba(var(--muted), 1);
+}
+
+.border {
+    border-color: rgba(var(--border), 1);
+}
+
+/* Provide a neutral mapping for bg-slate-100 in light mode as well (keeps styling consistent) */
+.bg-slate-100 {
+    background-color: #f1f5f9;
+}
+
+/* Mobile helpers and safe-area insets for phones with notches.
+   Provides a simple utility class `safe-area` and a few small mobile spacing helpers.
+*/
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+}
+
+.safe-area {
+    padding-top: var(--safe-top);
+    padding-right: var(--safe-right);
+    padding-bottom: var(--safe-bottom);
+    padding-left: var(--safe-left);
+}
+
+.safe-area-x {
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+}
+
+.safe-area-y {
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+}
+
+/* Small mobile-focused spacing utilities (applied at small widths only) */
+@media (max-width: 640px) {
+    .sm-gap-2 {
+        gap: 0.5rem;
+    }
+
+    .sm-p-2 {
+        padding: 0.5rem;
+    }
+
+    .sm-px-3 {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .sm-text-sm {
+        font-size: 0.95rem;
+    }
+}

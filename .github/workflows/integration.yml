@@ -1,0 +1,49 @@
+name: Integration (wrangler/miniflare)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start wrangler dev (miniflare) in background
+        run: |
+          npx wrangler dev --local &
+          # wait for the worker to be ready (retry)
+          for i in {1..30}; do
+            if curl -sSf http://localhost:8787/__diag >/dev/null; then
+              echo "worker up"
+              break
+            fi
+            echo "waiting for worker... ($i)"
+            sleep 1
+          done
+
+      - name: Run integration-check script
+        env:
+          BASE_URL: http://localhost:8787
+        run: node scripts/integration-check.js
+
+      - name: Tear down
+        if: always()
+        run: |
+          # kill background wrangler if running
+          pkill -f 'wrangler dev' || true
+          sleep 1
