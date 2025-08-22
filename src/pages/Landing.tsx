@@ -100,6 +100,31 @@ export default function Landing() {
                     </div>
                 </article>
             </section>
+            <footer className="mt-10 text-sm text-slate-500">
+                <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="text-slate-600">
+                        © {new Date().getFullYear()} <a href="https://adamcaudill.com" target="_blank" rel="noreferrer" className="text-sky-600 underline">Adam Caudill</a>
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                        <a href="https://github.com/adcaudill/thoughts" target="_blank" rel="noreferrer" aria-label="GitHub" className="text-slate-600 hover:text-sky-600">
+                            <i className="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+                            <span className="sr-only">GitHub</span>
+                        </a>
+
+                        <a href="https://infosec.exchange/@adam_caudill" target="_blank" rel="noreferrer" aria-label="Mastodon" className="text-slate-600 hover:text-sky-600">
+                            <i className="fa-brands fa-mastodon fa-lg" aria-hidden="true"></i>
+                            <span className="sr-only">Mastodon</span>
+                        </a>
+
+                        <a href="https://bsky.app/profile/adamcaudill.com" target="_blank" rel="noreferrer" aria-label="Bluesky" className="text-slate-600 hover:text-sky-600">
+                            <i className="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+                            <span className="sr-only">Bluesky</span>
+                        </a>
+                    </div>
+                </div>
+            </footer>
+
         </div>
     )
 }
