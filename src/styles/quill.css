@@ -119,6 +119,48 @@
     .ql-snow .ql-toolbar+.ql-container {
         border-top-color: rgba(255, 255, 255, 0.06) !important;
     }
+
+    /* ----------------------
+       Dark-mode picker (header/font/size) styles
+       Ensures label text, chevrons, and dropdown options are legible.
+       ---------------------- */
+    .ql-snow .ql-picker,
+    .ql-toolbar.ql-snow .ql-picker-label,
+    .ql-snow .ql-picker-label {
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+
+    .ql-snow .ql-picker.ql-expanded .ql-picker-label {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border-color: rgba(255, 255, 255, 0.10) !important;
+        color: rgba(255, 255, 255, 0.98) !important;
+    }
+
+    .ql-toolbar.ql-snow .ql-picker-options,
+    .ql-snow .ql-picker-options {
+        background: rgba(15, 23, 42, 0.95) !important;
+        /* slate-900 */
+        color: rgba(255, 255, 255, 0.95) !important;
+        border-color: rgba(255, 255, 255, 0.10) !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+    }
+
+    .ql-snow .ql-picker-options .ql-picker-item {
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+
+    .ql-snow .ql-picker-options .ql-picker-item:hover,
+    .ql-snow .ql-picker-options .ql-picker-item.ql-selected {
+        color: rgb(56, 189, 248) !important;
+        /* sky-400 */
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Header picker uses ::before for labels; ensure they inherit the color */
+    .ql-snow .ql-picker.ql-header .ql-picker-label::before,
+    .ql-snow .ql-picker.ql-header .ql-picker-item::before {
+        color: inherit !important;
+    }
 }
 
 .ql-container.ql-disabled .ql-tooltip {
