@@ -8,6 +8,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
     const [editorFont, setEditorFont] = useState<'sans-serif' | 'serif' | 'monospace'>('sans-serif')
     const [showWordCount, setShowWordCount] = useState(false)
     const [dirty, setDirty] = useState(false)
+    const [focusCurrentParagraph, setFocusCurrentParagraph] = useState(false)
 
     useEffect(() => {
         if (!open) return
@@ -19,6 +20,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 const s = res.settings || {}
                 if (s.editorFont) setEditorFont(s.editorFont)
                 if (typeof s.showWordCount === 'boolean') setShowWordCount(s.showWordCount)
+                if (typeof s.focusCurrentParagraph === 'boolean') setFocusCurrentParagraph(s.focusCurrentParagraph)
                 setDirty(false)
             }
         }).finally(() => { if (mounted) setLoading(false) })
@@ -27,7 +29,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
 
     async function save() {
         setLoading(true)
-        const payload = { editorFont, showWordCount }
+        const payload = { editorFont, showWordCount, focusCurrentParagraph }
         const res = await updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
@@ -62,6 +64,13 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                             <input type="checkbox" checked={showWordCount} onChange={e => { setShowWordCount(e.target.checked); setDirty(true) }} />
                             <span className="text-sm">Show word count</span>
                         </label>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={focusCurrentParagraph} onChange={e => { setFocusCurrentParagraph(e.target.checked); setDirty(true) }} />
+                            <span className="text-sm">Focus current paragraph (dim others)</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">Diminishes surrounding text while typing to help you focus on the active paragraph.</p>
                     </div>
                 </div>
 

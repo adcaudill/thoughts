@@ -19,7 +19,7 @@ export default function App() {
     const [dirtyNoteIds, setDirtyNoteIds] = useState<Record<string, boolean>>({})
     const [focusMode, setFocusMode] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settings, setSettings] = useState<any>({ editorFont: 'sans-serif', showWordCount: false })
+    const [settings, setSettings] = useState<any>({ editorFont: 'sans-serif', showWordCount: false, focusCurrentParagraph: false })
     const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
     const hideTimerRef = React.useRef<number | null>(null)
     const editorRef = React.useRef<EditorHandle | null>(null)
@@ -34,7 +34,7 @@ export default function App() {
                 const res = await (await import('./lib/api')).getSettings()
                 if (!mounted) return
                 if (res && res.ok) {
-                    setSettings(res.settings || { editorFont: 'sans-serif', showWordCount: false })
+                    setSettings({ editorFont: 'sans-serif', showWordCount: false, focusCurrentParagraph: false, ...(res.settings || {}) })
                     setAuthed(true)
                 }
             } catch (_e) {

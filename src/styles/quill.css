@@ -230,6 +230,18 @@
     font-family: inherit !important;
 }
 
+/* Focus current paragraph mode: dim non-active lines */
+.qp-focus-current .ql-editor>* {
+    transition: color 120ms ease, opacity 120ms ease;
+    color: inherit;
+    opacity: 0.45;
+}
+
+.qp-focus-current .ql-editor>*.qp-active-line,
+.qp-focus-current .ql-editor>.qp-active-line {
+    opacity: 1 !important;
+}
+
 .ql-editor>* {
     cursor: text
 }

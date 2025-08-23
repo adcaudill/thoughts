@@ -23,8 +23,11 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const [menuOpen, setMenuOpen] = useState(false)
     const [folders, setFolders] = useState<Array<any>>([])
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined)
+    const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null)
 
     const titleRef = React.useRef<HTMLInputElement | null>(null)
+    const wrapperRef = React.useRef<HTMLDivElement | null>(null)
+    const quillRef = React.useRef<any>(null)
     const [isCompactToolbar, setIsCompactToolbar] = useState(false)
     // Track save-in-progress to avoid concurrent createNote races
     const isSavingRef = React.useRef(false)
@@ -272,6 +275,86 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         } catch { return 0 }
     }
 
+    // Helper: mark active block from a Quill index
+    const markActiveFromIndex = React.useCallback((index: number | null | undefined) => {
+        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
+        if (index == null) { setActiveBlockIndex(null); return }
+        const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
+        const quill = quillRef.current?.getEditor?.()
+        if (!root || !quill) { setActiveBlockIndex(null); return }
+        try {
+            root.querySelectorAll('.qp-active-line').forEach(el => el.classList.remove('qp-active-line'))
+            const [line] = quill.getLine(index) || []
+            if (!line || !line.domNode) { setActiveBlockIndex(null); return }
+            let el: HTMLElement | null = line.domNode as HTMLElement
+            while (el && el.parentElement && el.parentElement !== root) {
+                el = el.parentElement
+            }
+            if (!el) { setActiveBlockIndex(null); return }
+            if (root.contains(el)) {
+                el.classList.add('qp-active-line')
+                const children = Array.from(root.children)
+                const pos = children.indexOf(el)
+                setActiveBlockIndex(pos >= 0 ? pos : null)
+            }
+        } catch { setActiveBlockIndex(null) }
+    }, [editorSettings && editorSettings.focusCurrentParagraph])
+
+    // Update active line highlighting when selection or content changes
+    useEffect(() => {
+        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
+        if (!wrapperRef.current) return
+        const root = wrapperRef.current.querySelector('.ql-editor') as HTMLElement | null
+        if (!root) return
+        // If one is already marked and still in DOM, keep it
+        const existing = root.querySelector('.qp-active-line') as HTMLElement | null
+        if (existing && root.contains(existing)) return
+        if (activeBlockIndex == null) return
+        const children = Array.from(root.children)
+        const el = children[activeBlockIndex] as HTMLElement | undefined
+        if (el) el.classList.add('qp-active-line')
+    }, [activeBlockIndex, content, editorSettings && editorSettings.focusCurrentParagraph])
+
+    // When toggling the setting ON or after content updates, ensure a selection maps to an active line
+    useEffect(() => {
+        if (!(editorSettings && editorSettings.focusCurrentParagraph)) {
+            // clear any leftover active-line when feature is off
+            const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
+            if (root) root.querySelectorAll('.qp-active-line').forEach(el => el.classList.remove('qp-active-line'))
+            return
+        }
+        const quill = quillRef.current?.getEditor?.()
+        if (!quill) return
+        const sel = quill.getSelection?.()
+        if (!sel || sel.index == null) return
+        // apply on next frame to avoid racing Quill DOM updates
+        requestAnimationFrame(() => markActiveFromIndex(sel.index))
+    }, [content, editorSettings && editorSettings.focusCurrentParagraph])
+
+    // Attach native Quill listeners for robust selection tracking
+    useEffect(() => {
+        const quill = quillRef.current?.getEditor?.()
+        if (!quill) return
+        function onSel(range: any) {
+            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
+            const idx = range && typeof range.index === 'number' ? range.index : null
+            markActiveFromIndex(idx as any)
+        }
+        function onText() {
+            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
+            const sel = quill.getSelection?.()
+            markActiveFromIndex(sel && sel.index)
+        }
+        quill.on('selection-change', onSel)
+        quill.on('text-change', onText)
+        return () => {
+            try {
+                quill.off('selection-change', onSel)
+                quill.off('text-change', onText)
+            } catch { /* ignore */ }
+        }
+    }, [editorSettings && editorSettings.focusCurrentParagraph, markActiveFromIndex])
+
     const containerClass = `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
 
     return (
@@ -311,8 +394,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
+                <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
                     <ReactQuill
+                        ref={quillRef}
                         theme="snow"
                         value={content}
                         onChange={(val: string) => {
@@ -322,8 +406,14 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                             setDirty(isDirty)
                             if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
                         }}
+                        onChangeSelection={(range) => {
+                            // Keep this as a lightweight hook; native quill listeners drive the logic
+                            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
+                            const idx = range && typeof range.index === 'number' ? range.index : null
+                            markActiveFromIndex(idx as any)
+                        }}
                         style={{ height: '100%' }}
-                        className="h-full"
+                        className={`h-full ${editorSettings && editorSettings.focusCurrentParagraph ? 'qp-focus-current' : ''}`}
                         modules={{ toolbar: toolbarConfig }}
                     />
                 </div>
