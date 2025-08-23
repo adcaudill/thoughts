@@ -12,4 +12,3 @@ updates:
       typescript-eslint:
         patterns:
           - "^@typescript-eslint/.*"
-        group-name: "typescript-eslint"
