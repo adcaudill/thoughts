@@ -69,10 +69,17 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
         const username = `mobile_e2e_${suffix}`
         await page.fill('input[placeholder="Username"], input:nth-of-type(1)', username)
         await page.fill('input[placeholder="Password"], input[type=password]', 'password123')
-        await page.click('button:has-text("Create account")')
+        await Promise.all([
+            page.click('button:has-text("Create account")'),
+            // wait for the register request to complete (avoid silent 500s)
+            page.waitForResponse(r => r.url().endsWith('/api/auth/register') && r.status() === 200, { timeout: 30000 }).catch(() => null)
+        ])
+
+        // also wait for verify to finish, if it occurs
+        await page.waitForResponse(r => r.url().endsWith('/api/auth/verify') && r.status() === 200, { timeout: 30000 }).catch(() => null)
 
         // wait for client to complete auth and render the authed app (allow more time in CI)
-        const asideHandle = await page.waitForSelector('aside', { timeout: 20000 })
+        const asideHandle = await page.waitForSelector('aside', { timeout: 45000 })
         expect(asideHandle).toBeTruthy()
         const cls = await asideHandle!.getAttribute('class')
         // collapsed state uses 'w-12' class; ensure it's present

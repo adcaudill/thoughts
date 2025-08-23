@@ -46,5 +46,46 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      - name: Run tests
-        run: npm test --silent
+      - name: Run unit & integration tests (non-e2e)
+        run: |
+          # Run non-e2e test suites first to avoid spawning wrangler from tests in parallel
+          npx vitest run test/unit test/integration test/*.test.ts --run --reporter dot
+        env:
+          CI: true
+
+      - name: Run D1 migrations (local)
+        run: |
+          npm run db:migrate
+
+      - name: Start wrangler dev (background)
+        run: |
+          nohup npx wrangler dev --local --port 8787 > wrangler.log 2>&1 &
+          echo $! > wrangler.pid
+          for i in {1..60}; do
+            if curl -sSf http://localhost:8787/api/auth/ping >/dev/null 2>&1; then
+              echo "wrangler ready"
+              break
+            fi
+            sleep 0.5
+          done
+          if ! curl -sSf http://localhost:8787/api/auth/ping >/dev/null 2>&1; then
+            echo "wrangler failed to start" >&2
+            tail -n +1 wrangler.log || true
+            exit 1
+          fi
+
+      - name: Run e2e tests
+        run: |
+          export E2E_BASE_URL=http://localhost:8787
+          npx vitest run test/e2e --run --no-file-parallelism --maxWorkers 1 --reporter dot
+        env:
+          CI: true
+
+      - name: Stop wrangler
+        if: always()
+        run: |
+          if [ -f wrangler.pid ]; then
+            kill "$(cat wrangler.pid)" || true
+            rm -f wrangler.pid
+          fi
+          pkill -f "wrangler dev" || true

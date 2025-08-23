@@ -37,6 +37,10 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
+      - name: Run D1 migrations (local)
+        run: |
+          # Apply local D1 migrations so the Worker has the expected schema
+          npm run db:migrate
       - name: Start wrangler dev (background)
         run: |
           # start wrangler dev in background on port 8787 and write logs
@@ -61,7 +65,7 @@ jobs:
           # Run only e2e tests to avoid spawning multiple wrangler instances
           export E2E_BASE_URL=http://localhost:8787
           # run vitest with a pattern that matches e2e tests
-          npx vitest run test/e2e --run --reporter dot
+          npx vitest run test/e2e --run --no-file-parallelism --maxWorkers 1 --reporter dot
         env:
           CI: true
 
