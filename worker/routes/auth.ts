@@ -1,5 +1,5 @@
 import { Router } from 'itty-router'
-import { v4 as uuidv4 } from 'uuid'
+// uuid is used in other worker modules; not required in this router file.
 import { signJwt, verifyJwt } from '../lib/jwt'
 import { registerUser, createChallenge, hashClientToServer } from '../lib/authService'
 

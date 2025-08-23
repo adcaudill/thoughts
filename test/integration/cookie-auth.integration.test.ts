@@ -33,11 +33,10 @@ describe('cookie auth flow', () => {
         const body = { username, client_hash: client_hash_b64 }
         env.JWT_SECRET = 'test-secret'
 
-        const loginReq = makeReq('POST', 'http://localhost/api/auth/login', body)
-            ; (loginReq as any).env = env
-        // call the router
-        // @ts-ignore
-        const loginRes = typeof (authRouter as any).fetch === 'function' ? await (authRouter as any).fetch(loginReq) : await (authRouter as any).handle(loginReq)
+        const loginReq = makeReq('POST', 'http://localhost/api/auth/login', body);
+        (loginReq as any).env = env
+        // call the router: prefer fetch or fallback to handle
+        const loginRes = (authRouter as any).fetch ? await (authRouter as any).fetch(loginReq) : await (authRouter as any).handle(loginReq)
         expect(loginRes).toBeTruthy()
         const setCookie = loginRes.headers.get('Set-Cookie')
         expect(setCookie).toBeTruthy()
@@ -52,10 +51,9 @@ describe('cookie auth flow', () => {
         // Now call dataRouter POST /api/notes with Cookie header containing the token
         const noteBody = { content_encrypted: 'c', nonce: 'n' }
         const cookieHeader = `thoughts_auth=${encodeURIComponent(token || '')}`
-        const notesReq = makeReq('POST', 'http://localhost/api/notes', noteBody, { Cookie: cookieHeader })
-            ; (notesReq as any).env = env
-        // @ts-ignore
-        const notesRes = typeof (dataRouter as any).fetch === 'function' ? await (dataRouter as any).fetch(notesReq) : await (dataRouter as any).handle(notesReq)
+        const notesReq = makeReq('POST', 'http://localhost/api/notes', noteBody, { Cookie: cookieHeader });
+        (notesReq as any).env = env
+        const notesRes = (dataRouter as any).fetch ? await (dataRouter as any).fetch(notesReq) : await (dataRouter as any).handle(notesReq)
         expect(notesRes).toBeTruthy()
         const j = await notesRes.json()
         expect(j.ok).toBe(true)

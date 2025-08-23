@@ -12,17 +12,7 @@ export async function deriveServerHash(clientHashB64: string, serverSaltB64: str
     return uint8ToBase64(new Uint8Array(sig))
 }
 
-async function pbkdf2HashFromClientHash(clientHashB64: string, serverSaltB64: string) {
-    // PBKDF2 fallback: derive 32 bytes using clientHash (raw bytes) as password and serverSalt as salt.
-    const pwd = base64ToUint8(clientHashB64)
-    const salt = base64ToUint8(serverSaltB64)
-    const key = await crypto.subtle.importKey('raw', pwd, { name: 'PBKDF2' }, false, ['deriveBits'])
-    // iterations chosen to be reasonably high for dev; adjust for production
-    const iterations = 150000
-    const derived = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256)
-    const u8 = new Uint8Array(derived)
-    return uint8ToBase64(u8)
-}
+// pbkdf2 fallback intentionally omitted to avoid unused helper and WASM pulls in Worker runtime
 
 // Use PBKDF2-only server-side hashing derived from the client_hash to avoid pulling argon2 WASM into the Worker runtime.
 // For Workers free-tier CPU constraints, use a single HMAC-SHA256 transform which is very fast
@@ -39,10 +29,9 @@ export async function registerUser(db: any, body: any) {
     const id = uuidv4()
     const serverSalt = crypto.getRandomValues(new Uint8Array(16))
     const serverSaltB64 = uint8ToBase64(serverSalt)
-    let hashed
     // Use deriveServerHash to deterministically derive server-side hash from client_hash + server salt
     const serverHash = await deriveServerHash(body.client_hash, serverSaltB64)
-    hashed = { hash: serverHash }
+    const hashed = { hash: serverHash }
     const recoveryHash = body.recovery_hash || null
     const recoveryEncryptedKey = body.recovery_encrypted_key || null
     const insertUserStmt = db.prepare('INSERT INTO users (id, username, email, server_password_hash, server_salt, client_salt, recovery_hash, recovery_encrypted_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
@@ -78,7 +67,6 @@ export async function verifyChallenge(db: any, env: any, params: { username: str
 
     const serverHash = userRes.server_password_hash
     const serverSalt = userRes.server_salt
-    let verify
     const expected = await deriveServerHash(client_hash, serverSalt)
     if (expected !== serverHash) throw new Error('invalid credentials')
 

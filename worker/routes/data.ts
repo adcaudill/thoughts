@@ -11,17 +11,7 @@ async function readJson(req: Request) {
     }
 }
 
-function base64ToUint8(b64: string) {
-    // Accept both base64 and base64url. Normalize to standard base64 and pad.
-    const s = b64.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '')
-    const pad = s.length % 4
-    const padded = s + (pad === 2 ? '==' : pad === 3 ? '=' : pad === 1 ? '===' : '')
-    const bin = atob(padded)
-    const len = bin.length
-    const arr = new Uint8Array(len)
-    for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i)
-    return arr
-}
+// base64ToUint8 helper intentionally removed to avoid duplication; use atob/Uint8Array wherever needed
 
 function uint8ToBase64(u8: Uint8Array) {
     let s = ''

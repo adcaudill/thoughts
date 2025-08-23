@@ -5,8 +5,6 @@ import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
 
-import { deleteNote } from '../lib/api'
-
 export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange }: { editingNote?: any; onSaved?: () => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void }) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
@@ -92,7 +90,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
         loadFolders()
     }, [])
 
-    async function handleSave(opts?: { clearAfterSave?: boolean }) {
+    async function handleSave(_opts?: { clearAfterSave?: boolean }) {
         try {
             setLoading(true)
             const key = getNoteKey()
@@ -109,6 +107,8 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
             } else {
                 await createNote({ folder_id: selectedFolder, content_encrypted: ciphertext, nonce })
             }
+            // notify caller that save completed
+            if (onSaved) onSaved()
             // mark as saved (don't clear editor)
             setInitialTitle(title)
             setInitialContent(content)

@@ -53,8 +53,8 @@ describe('notes integration', () => {
         const authReq = makeReq('POST', 'http://localhost/api/notes', body, { Authorization: `Bearer ${token}` })
             // attach env like other tests do and call router
             ; (authReq as any).env = env
-        // @ts-ignore
-        const res = typeof (dataRouter as any).fetch === 'function' ? await (dataRouter as any).fetch(authReq) : await (dataRouter as any).handle(authReq)
+        // @ts-expect-error - router may expose either fetch or handle depending on test harness
+        const res = (dataRouter as any).fetch ? await (dataRouter as any).fetch(authReq) : await (dataRouter as any).handle(authReq)
         expect(res).toBeTruthy()
         const json = await res.json()
         expect(json.ok).toBe(true)
@@ -84,10 +84,10 @@ describe('notes integration', () => {
 
         env.JWT_SECRET = 'test-secret'
         const token = await makeJwt(user.id, env.JWT_SECRET)
-        const authReq = makeReq('POST', 'http://localhost/api/notes', body, { Authorization: `Bearer ${token}` })
-            ; (authReq as any).env = env
-        // @ts-ignore
-        const res = typeof (dataRouter as any).fetch === 'function' ? await (dataRouter as any).fetch(authReq) : await (dataRouter as any).handle(authReq)
+        const authReq = makeReq('POST', 'http://localhost/api/notes', body, { Authorization: `Bearer ${token}` });
+        (authReq as any).env = env
+        // router may expose either fetch or handle depending on test harness
+        const res = (dataRouter as any).fetch ? await (dataRouter as any).fetch(authReq) : await (dataRouter as any).handle(authReq)
         const json = await res.json()
         expect(json.ok).toBe(true)
 

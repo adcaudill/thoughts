@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { decryptNotePayload, deriveNoteKey, encryptNotePayload } from '../lib/crypto'
+import { decryptNotePayload, encryptNotePayload } from '../lib/crypto'
 import { createFolder, updateFolder, deleteFolder, getFolders } from '../lib/api'
 
 type Folder = {
@@ -71,21 +71,8 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
 
     const tree = folders ? buildTree(folders) : []
 
-    async function decryptName(nameEncrypted: string) {
-        if (!noteKey) return nameEncrypted || 'Untitled'
-        // try to parse as nonce.ciphertext
-        const parts = (nameEncrypted || '').split('.')
-        if (parts.length === 2) {
-            try {
-                const [nonceB64, cipherB64] = parts
-                const plain = await decryptNotePayload(noteKey, cipherB64, nonceB64)
-                return plain || 'Untitled'
-            } catch (_e) {
-                return nameEncrypted || 'Untitled'
-            }
-        }
-        return nameEncrypted || 'Untitled'
-    }
+    // note: per current usage, folder display names are computed via `nameDisplayMap`.
+    // If a future refactor needs on-demand decryption, reintroduce a helper here.
 
     const [editingMap, setEditingMap] = useState<Record<string, boolean>>({})
     const [nameMap, setNameMap] = useState<Record<string, string>>({})

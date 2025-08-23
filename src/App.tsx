@@ -5,12 +5,11 @@ import NoteList from './components/NoteList'
 import Auth from './components/Auth'
 import Landing from './pages/Landing'
 import { loadSessionFromStorage, getNoteKey } from './lib/session'
-import { decryptNotePayload } from './lib/crypto'
 import { getFolders } from './lib/api'
 
 export default function App() {
     const [authed, setAuthed] = useState(false)
-    const [selectedNote, setSelectedNote] = useState<string | undefined>(undefined)
+    const [, setSelectedNote] = useState<string | undefined>(undefined)
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined)
     const [editingNote, setEditingNote] = useState<any | undefined>(undefined)
     const [refreshSignal, setRefreshSignal] = useState(0)
@@ -76,7 +75,6 @@ export default function App() {
                             <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
                             {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
                                 setEditingNote(note)
-                                setSelectedNote(note.id)
                                 if (note.folder_id) setSelectedFolder(note.folder_id)
                             }} refreshSignal={refreshSignal} />}
                         </aside>

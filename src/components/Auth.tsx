@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { randomSalt, deriveClientHash, deriveNoteKey, saltToBase64, encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { base64ToUint8, uint8ToBase64 } from '../lib/base64'
-import { register, login } from '../lib/api'
+import { register } from '../lib/api'
 import { setSessionFromServer, loadSessionFromStorage } from '../lib/session'
 
 export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => void, initialMode?: 'login' | 'register', onCancel?: () => void }) {

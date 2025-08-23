@@ -18,7 +18,7 @@ export async function login(payload: { username: string; client_hash: string }) 
     return res.json()
 }
 
-export async function getFolders(token?: string) {
+export async function getFolders(_token?: string) {
     const res = await fetch('/api/folders', { credentials: 'same-origin' })
     return res.json()
 }

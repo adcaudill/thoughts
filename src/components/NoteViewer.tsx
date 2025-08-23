@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getNoteKey } from '../lib/session'
 import { decryptNotePayload } from '../lib/crypto'
-import { deleteNote } from '../lib/api'
 
 export default function NoteViewer({ id, onEdit, onDeleted }: { id?: string; onEdit?: (note: any) => void; onDeleted?: () => void }) {
     const [note, setNote] = useState<any | null>(null)

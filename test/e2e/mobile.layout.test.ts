@@ -4,17 +4,19 @@ import { spawn } from 'child_process'
 
 function waitForPing(base: string, ms = 10000) {
     const start = Date.now()
-    return new Promise(async (resolve, reject) => {
-        while (Date.now() - start < ms) {
-            try {
-                const res = await fetch(base + '/api/auth/ping')
-                if (res.status === 200) return resolve(true)
-            } catch (e) {
-                // ignore
+    return new Promise((resolve, reject) => {
+        (async () => {
+            while (Date.now() - start < ms) {
+                try {
+                    const res = await fetch(base + '/api/auth/ping')
+                    if (res.status === 200) return resolve(true)
+                } catch (e) {
+                    // ignore
+                }
+                await new Promise(r => setTimeout(r, 250))
             }
-            await new Promise(r => setTimeout(r, 250))
-        }
-        reject(new Error('timeout waiting for ping'))
+            reject(new Error('timeout waiting for ping'))
+        })()
     })
 }
 
@@ -24,6 +26,21 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
     proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
     proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
 
+    async function waitForVite(ms = 20000) {
+        const viteUrl = 'http://localhost:5173'
+        const start = Date.now()
+        while (Date.now() - start < ms) {
+            try {
+                const r = await fetch(viteUrl)
+                if (r.ok || r.status === 200) return true
+            } catch (e) {
+                // not up yet
+            }
+            await new Promise(r => setTimeout(r, 250))
+        }
+        return false
+    }
+
     try {
         await waitForPing(base, 20000)
 
@@ -32,22 +49,7 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
         const context = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' })
         const page = await context.newPage()
 
-        const viteUrl = 'http://localhost:5173'
         let viteProc: any = null
-        async function waitForVite(ms = 20000) {
-            const start = Date.now()
-            while (Date.now() - start < ms) {
-                try {
-                    const r = await fetch(viteUrl)
-                    if (r.ok || r.status === 200) return true
-                } catch (e) {
-                    // not up yet
-                }
-                await new Promise(r => setTimeout(r, 250))
-            }
-            return false
-        }
-
         const viteReady = await waitForVite(1000)
         if (!viteReady) {
             viteProc = spawn('npm', ['run', 'dev'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })

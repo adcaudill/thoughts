@@ -19,7 +19,7 @@ export default {
             // In local development, if the request is to the worker root, forward to the frontend dev server
             // Check Host header and URL to avoid redirecting in production.
             // attach env for routers
-            ; (request as any).env = env
+            (request as any).env = env
 
             // Helper to create a safe forwarded Request by consuming the body once (avoids unconsumed ReadableStream branches)
             const makeForwardedRequest = async (req: Request) => {
