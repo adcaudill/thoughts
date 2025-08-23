@@ -17,6 +17,8 @@ export default function App() {
     const [showingAuth, setShowingAuth] = useState<'none' | 'login' | 'register'>('none')
     const [dirtyNoteIds, setDirtyNoteIds] = useState<Record<string, boolean>>({})
     const [focusMode, setFocusMode] = useState(false)
+    const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
+    const hideTimerRef = React.useRef<number | null>(null)
 
     React.useEffect(() => { loadSessionFromStorage() }, [])
 
@@ -45,9 +47,42 @@ export default function App() {
         return () => window.removeEventListener('keydown', onKey)
     }, [focusMode])
 
+    // Zen header: hide after inactivity in focus mode; show on interaction
+    React.useEffect(() => {
+        if (!focusMode) {
+            setZenHeaderVisible(true)
+            if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = null
+            return
+        }
+
+        function revealAndScheduleHide() {
+            setZenHeaderVisible(true)
+            if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = window.setTimeout(() => setZenHeaderVisible(false), 2500)
+        }
+
+        // initial schedule when entering focus mode
+        revealAndScheduleHide()
+
+        const onMove = () => revealAndScheduleHide()
+        const onScroll = () => revealAndScheduleHide()
+
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('touchstart', onMove, { passive: true })
+        window.addEventListener('scroll', onScroll, { passive: true })
+        return () => {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('touchstart', onMove)
+            window.removeEventListener('scroll', onScroll)
+            if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = null
+        }
+    }, [focusMode])
+
     return (
         <div className={`min-h-screen ${focusMode ? 'bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950' : 'bg-gray-50'} text-slate-900 safe-area`}>
-            <header className="p-6 max-w-6xl mx-auto flex items-start justify-between">
+            <header className={`${focusMode ? 'fixed top-0 left-0 right-0 z-20 transition-all duration-300 ' + (zenHeaderVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none') : ''} p-6 max-w-6xl mx-auto flex items-start justify-between ${focusMode ? 'bg-white/80 dark:bg-slate-900/60 backdrop-blur' : ''}`}>
                 <div>
                     <h1 className="text-3xl font-semibold">thoughts</h1>
                     <p className="text-sm text-slate-500">private, end-to-end encrypted notes</p>
@@ -88,7 +123,7 @@ export default function App() {
                 </nav>
             </header>
 
-            <main className="max-w-6xl mx-auto p-6">
+            <main className={`max-w-6xl mx-auto p-6 ${focusMode ? 'pt-24' : ''}`}>
                 {!authed ? (
                     showingAuth === 'none' ? (
                         <Landing />
@@ -96,54 +131,28 @@ export default function App() {
                         <Auth initialMode={showingAuth} onCancel={() => setShowingAuth('none')} onAuth={() => setAuthed(true)} />
                     )
                 ) : (
-                    <>
-                        {!focusMode ? (
-                            <div className="flex flex-col sm:flex-row gap-6">
-                                <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
-                                    <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
-                                    {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
-                                        setEditingNote(note)
-                                        if (note.folder_id) setSelectedFolder(note.folder_id)
-                                    }} refreshSignal={refreshSignal} />}
-                                </aside>
+                    <div className={focusMode ? 'flex justify-center' : 'flex flex-col sm:flex-row gap-6'}>
+                        {!focusMode && (
+                            <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
+                                <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
+                                {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
+                                    setEditingNote(note)
+                                    if (note.folder_id) setSelectedFolder(note.folder_id)
+                                }} refreshSignal={refreshSignal} />}
+                            </aside>
+                        )}
 
-                                <section className="flex-1">
-                                    <div className="grid grid-cols-1 gap-6">
-                                        <div className="col-span-1">
-                                            <Editor
-                                                editingNote={editingNote}
-                                                onSaved={(createdId?: string) => {
-                                                    // Refresh note list, but do NOT clear the editor state.
-                                                    setRefreshSignal(v => v + 1)
-                                                    // If the editor created a new note, attach the created id to the
-                                                    // existing editingNote so subsequent saves patch instead of creating.
-                                                    if (createdId) {
-                                                        setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
-                                                    }
-                                                }}
-                                                onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
-                                                onDirtyChange={(id: string, dirty: boolean) => {
-                                                    setDirtyNoteIds(prev => {
-                                                        const next = { ...prev }
-                                                        if (!id) return next
-                                                        if (dirty) next[id] = true
-                                                        else delete next[id]
-                                                        return next
-                                                    })
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </section>
-                            </div>
-                        ) : (
-                            <div className="flex justify-center">
-                                <section className="w-full max-w-4xl">
+                        <section className={focusMode ? 'w-full max-w-4xl' : 'flex-1'}>
+                            <div className="grid grid-cols-1 gap-6">
+                                <div className="col-span-1">
                                     <Editor
-                                        focusMode
+                                        focusMode={focusMode}
                                         editingNote={editingNote}
                                         onSaved={(createdId?: string) => {
+                                            // Refresh note list, but do NOT clear the editor state.
                                             setRefreshSignal(v => v + 1)
+                                            // If the editor created a new note, attach the created id to the
+                                            // existing editingNote so subsequent saves patch instead of creating.
                                             if (createdId) {
                                                 setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
                                             }
@@ -159,10 +168,10 @@ export default function App() {
                                             })
                                         }}
                                     />
-                                </section>
+                                </div>
                             </div>
-                        )}
-                    </>
+                        </section>
+                    </div>
                 )}
             </main>
         </div>
