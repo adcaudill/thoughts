@@ -20,10 +20,32 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
     const titleRef = React.useRef<HTMLInputElement | null>(null)
     const [isCompactToolbar, setIsCompactToolbar] = useState(false)
 
+    // Normalize Quill/HTML content so that editor default placeholder HTML (e.g. "<p><br></p>")
+    // is treated as an empty string. This prevents autosave from creating junk notes when
+    // the user hasn't actually entered any text.
+    function normalizeEditorHtml(html: string | null | undefined) {
+        if (!html) return ''
+        const raw = String(html).trim()
+        // Quick checks for common empty Quill output
+        if (!raw) return ''
+        // If the DOM text content is empty then treat as empty
+        try {
+            const div = document.createElement('div')
+            div.innerHTML = raw
+            if ((div.textContent || '').trim() === '') return ''
+        } catch {
+            // fall back to simple regex checks
+            const emptyRe = /^(<p>(?:<br\s*\/?>)?<\/p>|<div>(?:<br\s*\/?>)?<\/div>)$/i
+            if (emptyRe.test(raw)) return ''
+        }
+        // remove zero-width spaces and normalize whitespace
+        return raw.replace(/\u200B/g, '').trim()
+    }
+
     useEffect(() => {
         if (editingNote) {
             const t = editingNote.title || ''
-            const c = editingNote.content || ''
+            const c = normalizeEditorHtml(editingNote.content || '')
             setTitle(t)
             setContent(c)
             setInitialTitle(t)
@@ -160,7 +182,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                     <input ref={titleRef} value={title} onChange={e => {
                         const newTitle = e.target.value
                         setTitle(newTitle)
-                        const isDirty = newTitle !== initialTitle || content !== initialContent
+                        const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
                         setDirty(isDirty)
                         if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
                     }} className="w-full text-xl font-semibold border-b pb-2" placeholder="Untitled" />
@@ -185,8 +207,10 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                         theme="snow"
                         value={content}
                         onChange={(val: string) => {
-                            setContent(val)
-                            const isDirty = title !== initialTitle || val !== initialContent
+                            // Normalize the incoming HTML so editor-default markup doesn't mark the note dirty
+                            const normalized = normalizeEditorHtml(val)
+                            setContent(normalized)
+                            const isDirty = title !== initialTitle || normalized !== initialContent
                             setDirty(isDirty)
                             if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
                         }}
