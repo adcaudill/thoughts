@@ -173,7 +173,14 @@ export default function App() {
                         {!focusMode && (
                             <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
                                 <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
-                                {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
+                                {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={async (note: any) => {
+                                    try {
+                                        if (editorRef.current && editorRef.current.isDirty && editorRef.current.isDirty()) {
+                                            await editorRef.current.save()
+                                        }
+                                    } catch (e) {
+                                        // ignore save errors for now but proceed to switch
+                                    }
                                     setEditingNote(note)
                                     if (note.folder_id) setSelectedFolder(note.folder_id)
                                 }} refreshSignal={refreshSignal} />}
