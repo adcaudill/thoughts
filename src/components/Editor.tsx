@@ -287,7 +287,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             'basic fundamentals', 'close proximity', 'end result', 'free gift', 'final outcome', 'past history', 'advance planning', 'added bonus', 'plan ahead', 'revert back', 'unexpected surprise', 'true facts', 'fall down', 'combine together', 'join together'
         ]
         const cliches = [
-            'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
+            'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
         ]
         const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
         const parts = [...fillers, ...redundancies].map(escape).map(s => `\\b${s}\\b`).concat(cliches)
