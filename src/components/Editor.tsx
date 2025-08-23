@@ -29,6 +29,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const wrapperRef = React.useRef<HTMLDivElement | null>(null)
     const quillRef = React.useRef<any>(null)
     const [isCompactToolbar, setIsCompactToolbar] = useState(false)
+    const styleOverlayRef = React.useRef<HTMLDivElement | null>(null)
+    const styleRafRef = React.useRef<number | null>(null)
     // Track save-in-progress to avoid concurrent createNote races
     const isSavingRef = React.useRef(false)
     // If we create a note, remember its id so subsequent saves patch instead of creating
@@ -274,6 +276,122 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             return text.split(/\s+/).filter(Boolean).length
         } catch { return 0 }
     }
+
+    // --- Style issues overlay (display-only) ---
+    function buildStyleIssuesRegex(): RegExp {
+        // English-only lists, case-insensitive; phrases use flexible whitespace
+        const fillers = [
+            'actually', 'basically', 'pretty much', 'sort of', 'kind of', 'really', 'very', 'quite', 'rather', 'somewhat', 'just', 'literally'
+        ]
+        const redundancies = [
+            'basic fundamentals', 'close proximity', 'end result', 'free gift', 'final outcome', 'past history', 'advance planning', 'added bonus', 'plan ahead', 'revert back', 'unexpected surprise', 'true facts', 'fall down', 'combine together', 'join together'
+        ]
+        const cliches = [
+            'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
+        ]
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+        const parts = [...fillers, ...redundancies].map(escape).map(s => `\\b${s}\\b`).concat(cliches)
+        // join with alternation; use global + case-insensitive
+        return new RegExp(parts.join('|'), 'gi')
+    }
+
+    const recomputeStyleIssues = React.useCallback(() => {
+        if (!(editorSettings && editorSettings.styleIssues)) return
+        const wrapper = wrapperRef.current
+        const root = wrapper?.querySelector('.ql-editor') as HTMLElement | null
+        if (!wrapper || !root) return
+        // Ensure overlay exists as a child of wrapper (not inside .ql-editor) to avoid Quill DOM mutation loops
+        let overlay = styleOverlayRef.current
+        if (!overlay || !overlay.parentElement) {
+            overlay = document.createElement('div')
+            overlay.className = 'style-issues-overlay'
+            styleOverlayRef.current = overlay
+            wrapper.appendChild(overlay)
+        }
+        // Clear previous marks
+        overlay.innerHTML = ''
+        const pattern = buildStyleIssuesRegex()
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node: any) => {
+                if (!node || !node.nodeValue) return NodeFilter.FILTER_REJECT
+                // skip inside overlay
+                if (node.parentElement && node.parentElement.closest('.style-issues-overlay')) return NodeFilter.FILTER_REJECT
+                // Ignore whitespace-only
+                return /\S/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            }
+        } as any)
+        const parentRect = (overlay.parentElement as HTMLElement).getBoundingClientRect()
+        const addStrike = (rect: DOMRect) => {
+            const line = document.createElement('div')
+            line.className = 'style-issue-strike'
+            const top = rect.top - parentRect.top + Math.max(0, Math.floor(rect.height * 0.55))
+            Object.assign(line.style, {
+                position: 'absolute',
+                left: `${rect.left - parentRect.left}px`,
+                top: `${top}px`,
+                width: `${rect.width}px`,
+                height: '1.5px',
+                backgroundColor: 'rgba(220,38,38,0.8)', // red-600
+                pointerEvents: 'none'
+            } as CSSStyleDeclaration)
+            overlay!.appendChild(line)
+        }
+        const processNode = (textNode: Text) => {
+            const text = textNode.nodeValue || ''
+            let m: RegExpExecArray | null
+            pattern.lastIndex = 0
+            while ((m = pattern.exec(text))) {
+                try {
+                    const range = document.createRange()
+                    range.setStart(textNode, m.index)
+                    range.setEnd(textNode, m.index + m[0].length)
+                    const rects = range.getClientRects()
+                    for (const r of Array.from(rects)) addStrike(r)
+                } catch { /* ignore range issues */ }
+            }
+        }
+        let current: Node | null = walker.nextNode()
+        while (current) {
+            processNode(current as Text)
+            current = walker.nextNode()
+        }
+    }, [editorSettings && editorSettings.styleIssues, content])
+
+    // Keep overlay in sync: on content, scroll, resize (avoid selection-change to prevent feedback loops)
+    useEffect(() => {
+        if (!(editorSettings && editorSettings.styleIssues)) {
+            // cleanup overlay if present
+            const overlay = styleOverlayRef.current
+            if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay)
+            styleOverlayRef.current = null
+            return
+        }
+        const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
+        if (!root) return
+        const quill = quillRef.current?.getEditor?.()
+        const schedule = () => {
+            if (styleRafRef.current) cancelAnimationFrame(styleRafRef.current)
+            styleRafRef.current = requestAnimationFrame(() => {
+                styleRafRef.current = null
+                recomputeStyleIssues()
+            })
+        }
+        const onText = () => schedule()
+        const onScroll = () => schedule()
+        const onResize = () => schedule()
+        quill?.on('text-change', onText)
+        root.addEventListener('scroll', onScroll)
+        window.addEventListener('resize', onResize)
+        // initial draw after a frame to allow layout
+        const id = requestAnimationFrame(() => recomputeStyleIssues())
+        return () => {
+            if (styleRafRef.current) cancelAnimationFrame(styleRafRef.current)
+            try { quill?.off('text-change', onText) } catch { }
+            root.removeEventListener('scroll', onScroll)
+            window.removeEventListener('resize', onResize)
+            cancelAnimationFrame(id)
+        }
+    }, [editorSettings && editorSettings.styleIssues, recomputeStyleIssues])
 
     // Helper: mark active block from a Quill index
     const markActiveFromIndex = React.useCallback((index: number | null | undefined) => {

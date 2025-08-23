@@ -230,6 +230,11 @@
     font-family: inherit !important;
 }
 
+/* Ensure overlay positions relative to editor content box */
+.editor-quill-wrapper {
+    position: relative;
+}
+
 /* Focus current paragraph mode: dim non-active lines */
 .qp-focus-current .ql-editor>* {
     transition: color 120ms ease, opacity 120ms ease;
@@ -240,6 +245,21 @@
 .qp-focus-current .ql-editor>*.qp-active-line,
 .qp-focus-current .ql-editor>.qp-active-line {
     opacity: 1 !important;
+}
+
+/* Style issues overlay: positioned above text but non-interactive */
+.style-issues-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.style-issue-strike {
+    pointer-events: none;
 }
 
 .ql-editor>* {

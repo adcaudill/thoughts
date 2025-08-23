@@ -9,6 +9,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
     const [showWordCount, setShowWordCount] = useState(false)
     const [dirty, setDirty] = useState(false)
     const [focusCurrentParagraph, setFocusCurrentParagraph] = useState(false)
+    const [styleIssues, setStyleIssues] = useState(false)
 
     useEffect(() => {
         if (!open) return
@@ -21,6 +22,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 if (s.editorFont) setEditorFont(s.editorFont)
                 if (typeof s.showWordCount === 'boolean') setShowWordCount(s.showWordCount)
                 if (typeof s.focusCurrentParagraph === 'boolean') setFocusCurrentParagraph(s.focusCurrentParagraph)
+                if (typeof s.styleIssues === 'boolean') setStyleIssues(s.styleIssues)
                 setDirty(false)
             }
         }).finally(() => { if (mounted) setLoading(false) })
@@ -29,7 +31,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
 
     async function save() {
         setLoading(true)
-        const payload = { editorFont, showWordCount, focusCurrentParagraph }
+        const payload = { editorFont, showWordCount, focusCurrentParagraph, styleIssues }
         const res = await updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
@@ -71,6 +73,13 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                             <span className="text-sm">Focus current paragraph (dim others)</span>
                         </label>
                         <p className="text-xs text-slate-500 mt-1">Diminishes surrounding text while typing to help you focus on the active paragraph.</p>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={styleIssues} onChange={e => { setStyleIssues(e.target.checked); setDirty(true) }} />
+                            <span className="text-sm">Highlight style issues</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">Visually strikes out words and phrases that are often considered weak or redundant in English writing. This is a display-only aid and does not change your note content.</p>
                     </div>
                 </div>
 
