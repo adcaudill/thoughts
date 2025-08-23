@@ -69,24 +69,24 @@ describe('Sidebar', () => {
         const createBtn = screen.getByLabelText('create-folder')
         // set value via change event and click create
         fireEvent.change(input, { target: { value: 'MyFolder' } })
-        createBtn.click()
+        fireEvent.click(createBtn)
         await waitFor(() => expect(screen.getByText('MyFolder')).toBeInTheDocument())
 
         // click rename for the new folder (id from mocked create is 'new1')
         const renameBtn = screen.getByLabelText('rename-new1')
-        renameBtn.click()
+        fireEvent.click(renameBtn)
         const saveBtn = await screen.findByLabelText('save-new1')
         // find input and change value
         const editInput = screen.getByLabelText('edit-folder-new1') as HTMLInputElement
         fireEvent.change(editInput, { target: { value: 'Renamed' } })
-        saveBtn.click()
+        fireEvent.click(saveBtn)
 
         await waitFor(() => expect(screen.getByText('Renamed')).toBeInTheDocument())
 
         // delete (mock confirm)
         vi.spyOn(window, 'confirm').mockImplementation(() => true)
         const delBtn = screen.getByLabelText('delete-new1')
-        delBtn.click()
+        fireEvent.click(delBtn)
         await waitFor(() => expect(screen.queryByText('Renamed')).not.toBeInTheDocument())
     })
 })

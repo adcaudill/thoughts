@@ -20,13 +20,24 @@ function waitForPing(base: string, ms = 10000) {
     })
 }
 
+const isUpOnce = async (url: string) => {
+    try {
+        const res = await fetch(url + '/api/auth/ping')
+        return res.status === 200
+    } catch {
+        return false
+    }
+}
+
 test('mobile layout: sidebar collapses and editor shows compact toolbar on small viewports', { timeout: 90000 }, async () => {
     const base = process.env.E2E_BASE_URL || 'http://localhost:8787'
     let proc: any = null
     if (!process.env.E2E_BASE_URL) {
-        proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
-        proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
-        proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+        if (!(await isUpOnce(base))) {
+            proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
+            proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
+            proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+        }
     }
 
     async function waitForVite(ms = 20000) {
