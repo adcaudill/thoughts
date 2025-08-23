@@ -39,7 +39,7 @@ export default function NoteViewer({ id, onEdit, onDeleted }: { id?: string; onE
             <div className="flex items-start justify-between">
                 <h2 className="text-xl font-semibold mb-2">{note.title || 'Untitled'}</h2>
                 <div className="flex gap-2">
-                    <button className="text-sm px-3 py-1 border rounded" onClick={() => onEdit && onEdit({ id, title: note.title, content: note.content })}>Edit</button>
+                    <button className="text-sm px-3 py-1 border dark:border-slate-800/30 rounded" onClick={() => onEdit && onEdit({ id, title: note.title, content: note.content })}>Edit</button>
                     <button className="text-sm px-3 py-1 bg-red-600 text-white rounded" onClick={async () => {
                         await fetch(`/api/notes/${id}`, { method: 'DELETE', credentials: 'same-origin' })
                         if (onDeleted) onDeleted()

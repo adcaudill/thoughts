@@ -121,7 +121,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                             <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label="inbox">Inbox</button>
                         ) : editing ? (
                             <input
-                                className="border p-1 text-sm w-full"
+                                className="border dark:border-slate-800/30 p-1 text-sm w-full"
                                 value={name}
                                 onChange={e => setNameFor(node.id, e.target.value)}
                                 onKeyDown={async (e) => {
@@ -188,7 +188,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                         <div>
                             <div className="mb-2">
                                 <div className="relative">
-                                    <input aria-label="new-folder-name" placeholder="New folder name" className="border px-3 py-2 text-sm pr-12 w-full min-w-0 rounded" id="new-folder-input" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={async (e) => {
+                                    <input aria-label="new-folder-name" placeholder="New folder name" className="border dark:border-slate-800/30 px-3 py-2 text-sm pr-12 w-full min-w-0 rounded" id="new-folder-input" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={async (e) => {
                                         if (e.key === 'Enter') {
                                             e.preventDefault()
                                             await createNewFolder()

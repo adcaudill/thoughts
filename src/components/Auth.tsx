@@ -258,17 +258,17 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
 
             <form onSubmit={mode === 'register' ? handleRegister : handleLogin}>
                 <label className="block text-sm">username</label>
-                <input placeholder="Username" className="w-full mb-2 border p-2" value={username} onChange={e => setUsername(e.target.value)} />
+                <input placeholder="Username" className="w-full mb-2 border dark:border-slate-800/30 p-2" value={username} onChange={e => setUsername(e.target.value)} />
 
                 {mode === 'register' && (
                     <>
                         <label className="block text-sm">email (optional)</label>
-                        <input className="w-full mb-2 border p-2" value={email} onChange={e => setEmail(e.target.value)} />
+                        <input className="w-full mb-2 border dark:border-slate-800/30 p-2" value={email} onChange={e => setEmail(e.target.value)} />
                     </>
                 )}
 
                 <label className="block text-sm">password</label>
-                <input placeholder="Password" type="password" className="w-full mb-4 border p-2" value={password} onChange={e => setPassword(e.target.value)} />
+                <input placeholder="Password" type="password" className="w-full mb-4 border dark:border-slate-800/30 p-2" value={password} onChange={e => setPassword(e.target.value)} />
 
                 <div className="flex items-center gap-3 mb-3">
                     <label className="inline-flex items-center text-sm">
@@ -287,14 +287,14 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
                     {recoverMode && (
                         <form onSubmit={recoveryToken ? handleRekey : handleRecoverRequest} className="mt-2">
                             <label className="block text-sm">recovery key</label>
-                            <input className="w-full mb-2 border p-2" value={recoveryKey || ''} onChange={e => setRecoveryKey(e.target.value)} />
+                            <input className="w-full mb-2 border dark:border-slate-800/30 p-2" value={recoveryKey || ''} onChange={e => setRecoveryKey(e.target.value)} />
                             <button className="bg-yellow-500 px-3 py-1 rounded mr-2" disabled={loading}>{recoveryToken ? 'apply new password' : 'request recovery token'}</button>
                         </form>
                     )}
                 </div>
             )}
             {recoveryKey && mode === 'register' && (
-                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded">
+                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-slate-800/30 rounded">
                     <strong className="text-yellow-800 dark:text-yellow-200">recovery key (save this now):</strong>
                     <div className="mt-2 font-mono break-all p-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded ring-1 ring-slate-100/60 dark:ring-slate-800/60">{recoveryKey}</div>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">this one-time recovery key can be used to regain access to encrypted notes if you forget your password. store it safely; it will not be shown again.</p>

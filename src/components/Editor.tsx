@@ -209,15 +209,15 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                         const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
                         setDirty(isDirty)
                         if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
-                    }} className="w-full text-xl font-semibold border-b pb-2" placeholder="Untitled" />
-                    <select aria-label="select-folder" className="text-sm border rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
+                    }} className="w-full text-xl font-semibold border-b dark:border-slate-800/30 pb-2" placeholder="Untitled" />
+                    <select aria-label="select-folder" className="text-sm border dark:border-slate-800/30 rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
                         {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
                     </select>
                 </div>
                 <div className="relative ml-4">
                     <button onClick={() => setMenuOpen(o => !o)} className="p-2 rounded hover:bg-slate-100" aria-label="Open menu">☰</button>
                     {menuOpen && (
-                        <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-md z-10">
+                        <div className="absolute right-0 mt-2 w-40 bg-white border dark:border-slate-800/30 rounded shadow-md z-10">
                             <button className="w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { setMenuOpen(false); handleDelete() }}>Delete</button>
                         </div>
                     )}
@@ -226,7 +226,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div className="border rounded overflow-hidden editor-quill-wrapper flex-1 safe-area">
+                <div className="border dark:border-slate-800/30 rounded overflow-hidden editor-quill-wrapper flex-1 safe-area">
                     <ReactQuill
                         theme="snow"
                         value={content}
