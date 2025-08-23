@@ -16,6 +16,7 @@ export default function App() {
     const [collapsed, setCollapsed] = useState(false)
     const [showingAuth, setShowingAuth] = useState<'none' | 'login' | 'register'>('none')
     const [dirtyNoteIds, setDirtyNoteIds] = useState<Record<string, boolean>>({})
+    const [focusMode, setFocusMode] = useState(false)
 
     React.useEffect(() => { loadSessionFromStorage() }, [])
 
@@ -29,36 +30,61 @@ export default function App() {
         return () => window.removeEventListener('resize', onResize)
     }, [])
 
+    // Keyboard shortcuts for focus mode
+    React.useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+                e.preventDefault()
+                setFocusMode(v => !v)
+            }
+            if (e.key === 'Escape' && focusMode) {
+                setFocusMode(false)
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [focusMode])
+
     return (
-        <div className="min-h-screen bg-gray-50 text-slate-900 safe-area">
+        <div className={`min-h-screen ${focusMode ? 'bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950' : 'bg-gray-50'} text-slate-900 safe-area`}>
             <header className="p-6 max-w-6xl mx-auto flex items-start justify-between">
                 <div>
                     <h1 className="text-3xl font-semibold">thoughts</h1>
                     <p className="text-sm text-slate-500">private, end-to-end encrypted notes</p>
                 </div>
                 <nav>
-                    {!authed && (
-                        <div className="flex gap-2">
-                            <button className="px-3 py-1 rounded border" onClick={async () => {
-                                // try to fast-path to the authed state if we have a stored note key and the server session is valid
-                                try {
-                                    loadSessionFromStorage()
-                                    const noteKey = getNoteKey()
-                                    if (noteKey) {
-                                        const res = await getFolders()
-                                        if (res && res.ok) {
-                                            setAuthed(true)
-                                            return
+                    <div className="flex items-center gap-2">
+                        {authed && (
+                            <button
+                                className={`px-3 py-1 rounded border text-sm ${focusMode ? 'bg-slate-900 text-white border-slate-900' : ''}`}
+                                onClick={() => setFocusMode(v => !v)}
+                                aria-pressed={focusMode}
+                                aria-label="Toggle focus mode"
+                            >{focusMode ? 'Exit focus' : 'Focus'}</button>
+                        )}
+                        {!authed && (
+                            <>
+                                <button className="px-3 py-1 rounded border" onClick={async () => {
+                                    // try to fast-path to the authed state if we have a stored note key and the server session is valid
+                                    try {
+                                        loadSessionFromStorage()
+                                        const noteKey = getNoteKey()
+                                        if (noteKey) {
+                                            const res = await getFolders()
+                                            if (res && res.ok) {
+                                                setAuthed(true)
+                                                return
+                                            }
                                         }
+                                    } catch (_e) {
+                                        // ignore and fall through to show login
                                     }
-                                } catch (_e) {
-                                    // ignore and fall through to show login
-                                }
-                                setShowingAuth('login')
-                            }}>login</button>
-                            <button className="px-3 py-1 rounded bg-slate-800 text-white" onClick={() => setShowingAuth('register')}>register</button>
-                        </div>
-                    )}
+                                    setShowingAuth('login')
+                                }}>login</button>
+                                <button className="px-3 py-1 rounded bg-slate-800 text-white" onClick={() => setShowingAuth('register')}>register</button>
+                            </>
+                        )}
+                    </div>
                 </nav>
             </header>
 
@@ -70,25 +96,54 @@ export default function App() {
                         <Auth initialMode={showingAuth} onCancel={() => setShowingAuth('none')} onAuth={() => setAuthed(true)} />
                     )
                 ) : (
-                    <div className="flex flex-col sm:flex-row gap-6">
-                        <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
-                            <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
-                            {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
-                                setEditingNote(note)
-                                if (note.folder_id) setSelectedFolder(note.folder_id)
-                            }} refreshSignal={refreshSignal} />}
-                        </aside>
+                    <>
+                        {!focusMode ? (
+                            <div className="flex flex-col sm:flex-row gap-6">
+                                <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
+                                    <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
+                                    {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={(note: any) => {
+                                        setEditingNote(note)
+                                        if (note.folder_id) setSelectedFolder(note.folder_id)
+                                    }} refreshSignal={refreshSignal} />}
+                                </aside>
 
-                        <section className="flex-1">
-                            <div className="grid grid-cols-1 gap-6">
-                                <div className="col-span-1">
+                                <section className="flex-1">
+                                    <div className="grid grid-cols-1 gap-6">
+                                        <div className="col-span-1">
+                                            <Editor
+                                                editingNote={editingNote}
+                                                onSaved={(createdId?: string) => {
+                                                    // Refresh note list, but do NOT clear the editor state.
+                                                    setRefreshSignal(v => v + 1)
+                                                    // If the editor created a new note, attach the created id to the
+                                                    // existing editingNote so subsequent saves patch instead of creating.
+                                                    if (createdId) {
+                                                        setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
+                                                    }
+                                                }}
+                                                onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
+                                                onDirtyChange={(id: string, dirty: boolean) => {
+                                                    setDirtyNoteIds(prev => {
+                                                        const next = { ...prev }
+                                                        if (!id) return next
+                                                        if (dirty) next[id] = true
+                                                        else delete next[id]
+                                                        return next
+                                                    })
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+                        ) : (
+                            <div className="flex justify-center">
+                                <section className="w-full max-w-4xl">
                                     <Editor
+                                        focusMode
                                         editingNote={editingNote}
                                         onSaved={(createdId?: string) => {
-                                            // Refresh note list, but do NOT clear the editor state.
                                             setRefreshSignal(v => v + 1)
-                                            // If the editor created a new note, attach the created id to the
-                                            // existing editingNote so subsequent saves patch instead of creating.
                                             if (createdId) {
                                                 setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
                                             }
@@ -104,10 +159,10 @@ export default function App() {
                                             })
                                         }}
                                     />
-                                </div>
+                                </section>
                             </div>
-                        </section>
-                    </div>
+                        )}
+                    </>
                 )}
             </main>
         </div>

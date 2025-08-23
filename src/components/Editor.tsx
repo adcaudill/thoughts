@@ -5,7 +5,7 @@ import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
 
-export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange }: { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void }) {
+export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode }: { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean }) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
@@ -199,9 +199,22 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
         if (onDeleted) onDeleted()
     }
 
+    const toolbarConfig = focusMode || isCompactToolbar ? [
+        [{ header: [1, 2, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link']
+    ] : [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['blockquote'],
+        ['link', 'image']
+    ]
+
     return (
-        <div className="bg-white rounded shadow p-4 min-h-[50vh] flex flex-col">
-            <div className="mb-4 flex items-center justify-between">
+        <div className={`${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`}>
+            <div className="mb-3 md:mb-4 flex items-center justify-between">
                 <div className="flex-1 flex items-center gap-4">
                     <input ref={titleRef} value={title} onChange={e => {
                         const newTitle = e.target.value
@@ -209,24 +222,28 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                         const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
                         setDirty(isDirty)
                         if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
-                    }} className="w-full text-xl font-semibold border-b dark:border-slate-800/30 pb-2" placeholder="Untitled" />
-                    <select aria-label="select-folder" className="text-sm border dark:border-slate-800/30 rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
-                        {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
-                    </select>
-                </div>
-                <div className="relative ml-4">
-                    <button onClick={() => setMenuOpen(o => !o)} className="p-2 rounded hover:bg-slate-100" aria-label="Open menu">☰</button>
-                    {menuOpen && (
-                        <div className="absolute right-0 mt-2 w-40 bg-white border dark:border-slate-800/30 rounded shadow-md z-10">
-                            <button className="w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { setMenuOpen(false); handleDelete() }}>Delete</button>
-                        </div>
+                    }} className={`w-full ${focusMode ? 'text-3xl md:text-4xl' : 'text-xl'} font-semibold bg-transparent border-b dark:border-slate-800/30 pb-2 outline-none`} placeholder="Untitled" />
+                    {!focusMode && (
+                        <select aria-label="select-folder" className="text-sm border dark:border-slate-800/30 rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
+                            {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
+                        </select>
                     )}
                 </div>
+                {!focusMode && (
+                    <div className="relative ml-4">
+                        <button onClick={() => setMenuOpen(o => !o)} className="p-2 rounded hover:bg-slate-100" aria-label="Open menu">☰</button>
+                        {menuOpen && (
+                            <div className="absolute right-0 mt-2 w-40 bg-white border dark:border-slate-800/30 rounded shadow-md z-10">
+                                <button className="w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { setMenuOpen(false); handleDelete() }}>Delete</button>
+                            </div>
+                        )}
+                    </div>
+                )}
 
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div className="border dark:border-slate-800/30 rounded overflow-hidden editor-quill-wrapper flex-1 safe-area">
+                <div className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-white/10'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
                     <ReactQuill
                         theme="snow"
                         value={content}
@@ -240,20 +257,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                         }}
                         style={{ height: '100%' }}
                         className="h-full"
-                        modules={{
-                            toolbar: isCompactToolbar ? [
-                                [{ header: [1, 2, false] }],
-                                ['bold', 'italic', 'underline'],
-                                [{ list: 'ordered' }, { list: 'bullet' }],
-                                ['link']
-                            ] : [
-                                [{ header: [1, 2, 3, false] }],
-                                ['bold', 'italic', 'underline', 'strike'],
-                                [{ list: 'ordered' }, { list: 'bullet' }],
-                                ['blockquote', 'code-block'],
-                                ['link', 'image']
-                            ]
-                        }}
+                        modules={{ toolbar: toolbarConfig }}
                     />
                 </div>
                 <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-end">
@@ -261,7 +265,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
                         {loading ? 'Saving…' : (lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : '')}
                     </div>
                     <button
-                        className={`px-4 py-2 rounded transition-colors duration-150 ${dirty && !loading ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-700 dark:text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}
+                        className={`px-4 py-2 rounded transition-colors duration-150 ${dirty && !loading ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-700 dark:text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'} ${focusMode && !dirty ? 'opacity-0 pointer-events-none' : ''}`}
                         onClick={() => handleSave()}
                         disabled={!dirty || loading}
                     >

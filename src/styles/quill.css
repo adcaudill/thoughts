@@ -99,6 +99,21 @@
         fill: rgb(var(--accent)) !important;
         color: rgb(var(--accent)) !important;
     }
+
+    /* Softer, low-contrast borders in dark mode */
+    .ql-snow .ql-toolbar,
+    .ql-snow .ql-container {
+        border-color: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    .ql-snow .ql-toolbar {
+        border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+        background: transparent;
+    }
+
+    .ql-snow .ql-toolbar+.ql-container {
+        border-top-color: rgba(255, 255, 255, 0.06) !important;
+    }
 }
 
 .ql-container.ql-disabled .ql-tooltip {
@@ -126,16 +141,37 @@
 .ql-editor {
     box-sizing: border-box;
     counter-reset: list-0 list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8 list-9;
-    line-height: 1.42;
+    line-height: 1.66;
     height: 100%;
     outline: none;
     overflow-y: auto;
-    padding: 12px 15px;
+    padding: 18px 22px;
     tab-size: 4;
     -moz-tab-size: 4;
     text-align: left;
     white-space: pre-wrap;
     word-wrap: break-word
+}
+
+/* Focus-mode: comfortable reading width and larger typography */
+.focus-editor .ql-container {
+    font-size: 16px;
+    background: transparent;
+}
+
+.focus-editor .ql-toolbar.ql-snow {
+    border: none;
+    background: transparent;
+}
+
+.focus-editor .ql-container.ql-snow {
+    border: none;
+}
+
+.focus-editor .ql-editor {
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 24px 0 32px;
 }
 
 .ql-editor>* {
