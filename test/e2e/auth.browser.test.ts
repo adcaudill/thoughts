@@ -25,11 +25,14 @@ function waitForPing(base: string, ms = 10000) {
 }
 
 test('browser-based register -> challenge -> verify flow', { timeout: 60000 }, async () => {
-    const base = 'http://localhost:8787'
-    // start wrangler dev --local on a fixed port for stability
-    const proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
-    proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
-    proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+    const base = process.env.E2E_BASE_URL || 'http://localhost:8787'
+    // If E2E_BASE_URL is not provided, tests will start a local wrangler process.
+    let proc: any = null
+    if (!process.env.E2E_BASE_URL) {
+        proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
+        proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
+        proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+    }
 
     async function waitForVite(ms = 20000) {
         const viteUrl = 'http://localhost:5173'
@@ -84,6 +87,6 @@ test('browser-based register -> challenge -> verify flow', { timeout: 60000 }, a
         await browser.close()
         if (viteProc) viteProc.kill()
     } finally {
-        proc.kill()
+        if (proc) proc.kill()
     }
 })

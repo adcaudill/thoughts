@@ -37,8 +37,39 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
+      - name: Start wrangler dev (background)
+        run: |
+          # start wrangler dev in background on port 8787 and write logs
+          nohup npx wrangler dev --local --port 8787 > wrangler.log 2>&1 &
+          echo $! > wrangler.pid
+          # wait for /api/auth/ping to respond (timeout 30s)
+          for i in {1..60}; do
+            if curl -sSf http://localhost:8787/api/auth/ping >/dev/null 2>&1; then
+              echo "wrangler ready"
+              break
+            fi
+            sleep 0.5
+          done
+          if ! grep -q "wrangler ready" wrangler.log && ! curl -sSf http://localhost:8787/api/auth/ping >/dev/null 2>&1; then
+            echo "wrangler failed to start" >&2
+            tail -n +1 wrangler.log
+            exit 1
+          fi
 
-      - name: Run tests
-        run: npm test --silent
+      - name: Run e2e tests against running worker
+        run: |
+          # Run only e2e tests to avoid spawning multiple wrangler instances
+          export E2E_BASE_URL=http://localhost:8787
+          # run vitest with a pattern that matches e2e tests
+          npx vitest run test/e2e --run --reporter dot
         env:
           CI: true
+
+      - name: Stop wrangler
+        if: always()
+        run: |
+          if [ -f wrangler.pid ]; then
+            kill "$(cat wrangler.pid)" || true
+            rm -f wrangler.pid
+          fi
+          pkill -f "wrangler dev" || true

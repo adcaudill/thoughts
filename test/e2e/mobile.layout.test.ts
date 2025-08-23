@@ -21,10 +21,13 @@ function waitForPing(base: string, ms = 10000) {
 }
 
 test('mobile layout: sidebar collapses and editor shows compact toolbar on small viewports', { timeout: 90000 }, async () => {
-    const base = 'http://localhost:8787'
-    const proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
-    proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
-    proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+    const base = process.env.E2E_BASE_URL || 'http://localhost:8787'
+    let proc: any = null
+    if (!process.env.E2E_BASE_URL) {
+        proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
+        proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
+        proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+    }
 
     async function waitForVite(ms = 20000) {
         const viteUrl = 'http://localhost:5173'
@@ -68,19 +71,15 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
         await page.fill('input[placeholder="Password"], input[type=password]', 'password123')
         await page.click('button:has-text("Create account")')
 
-        // wait for client to complete auth and render the authed app
-        await page.waitForTimeout(3000)
-
-        // sidebar should be collapsed on small viewport (App sets collapsed when innerWidth < 640)
-        const aside = await page.$('aside')
-        expect(aside).toBeTruthy()
-        const cls = await aside!.getAttribute('class')
+        // wait for client to complete auth and render the authed app (allow more time in CI)
+        const asideHandle = await page.waitForSelector('aside', { timeout: 20000 })
+        expect(asideHandle).toBeTruthy()
+        const cls = await asideHandle!.getAttribute('class')
         // collapsed state uses 'w-12' class; ensure it's present
         expect(cls || '').toContain('w-12')
 
         // Editor should be present with a toolbar suitable for mobile
-        const toolbar = await page.$('.ql-toolbar')
-        expect(toolbar).not.toBeNull()
+        await page.waitForSelector('.ql-toolbar', { timeout: 20000 })
         const btns = await page.$$('.ql-toolbar button')
         // compact toolbar should be relatively small; assert it's not huge
         expect(btns.length).toBeLessThanOrEqual(12)
@@ -88,6 +87,6 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
         await browser.close()
         if (viteProc) viteProc.kill()
     } finally {
-        proc.kill()
+        if (proc) proc.kill()
     }
 })
