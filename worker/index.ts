@@ -99,8 +99,8 @@ export default {
                 }
             }
 
-            // Forward data routes to dataRouter
-            if (url.pathname.startsWith('/api/folders') || url.pathname.startsWith('/api/notes') || url.pathname.startsWith('/api/data')) {
+            // Forward data routes to dataRouter (include settings)
+            if (url.pathname.startsWith('/api/folders') || url.pathname.startsWith('/api/notes') || url.pathname.startsWith('/api/data') || url.pathname.startsWith('/api/settings')) {
                 try {
                     const fReq = await makeForwardedRequest(request)
                     if (typeof (dataRouter as any).fetch === 'function') {

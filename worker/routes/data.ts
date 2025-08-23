@@ -230,4 +230,63 @@ router.delete('/api/notes/:id', async request => {
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
 })
 
+// User settings: stored as JSON string in users.settings
+// Schema is validated server-side to avoid arbitrary data injection.
+function validateSettings(obj: any) {
+    if (!obj || typeof obj !== 'object') return { valid: false, error: 'invalid payload' }
+    const allowedKeys = ['editorFont', 'showWordCount']
+    const result: any = {}
+    for (const k of Object.keys(obj)) {
+        if (!allowedKeys.includes(k)) return { valid: false, error: `unknown setting '${k}'` }
+    }
+    if (obj.editorFont !== undefined) {
+        if (typeof obj.editorFont !== 'string') return { valid: false, error: 'editorFont must be a string' }
+        // limit to a small whitelist to prevent abuse
+        const fonts = ['serif', 'sans-serif', 'monospace']
+        if (!fonts.includes(obj.editorFont)) return { valid: false, error: 'invalid editorFont' }
+        result.editorFont = obj.editorFont
+    }
+    if (obj.showWordCount !== undefined) {
+        if (typeof obj.showWordCount !== 'boolean') return { valid: false, error: 'showWordCount must be boolean' }
+        result.showWordCount = obj.showWordCount
+    }
+    return { valid: true, value: result }
+}
+
+router.get('/api/settings', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const row = await db.prepare('SELECT settings FROM users WHERE id = ?').bind(userId).first()
+    if (!row) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
+    let parsed = {}
+    try {
+        parsed = row.settings ? JSON.parse(row.settings) : {}
+    } catch {
+        parsed = {}
+    }
+    return new Response(JSON.stringify({ ok: true, settings: parsed }), { status: 200 })
+})
+
+router.patch('/api/settings', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const body = await readJson(request)
+    if (!body) return new Response(JSON.stringify({ ok: false, error: 'missing body' }), { status: 400 })
+
+    const valid = validateSettings(body)
+    if (!valid.valid) return new Response(JSON.stringify({ ok: false, error: valid.error }), { status: 400 })
+
+    // Merge with existing settings
+    const row = await db.prepare('SELECT settings FROM users WHERE id = ?').bind(userId).first()
+    let existing = {}
+    try { existing = row && row.settings ? JSON.parse(row.settings) : {} } catch { existing = {} }
+    const merged = { ...existing, ...valid.value }
+    await db.prepare('UPDATE users SET settings = ? WHERE id = ?').bind(JSON.stringify(merged), userId).run()
+    return new Response(JSON.stringify({ ok: true, settings: merged }), { status: 200 })
+})
+
 export default router

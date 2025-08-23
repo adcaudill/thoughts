@@ -10,9 +10,9 @@ export type EditorHandle = {
     isDirty: () => boolean
 }
 
-type EditorProps = { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean }
+type EditorProps = { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean; editorSettings?: any }
 
-const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode }, ref) {
+const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode, editorSettings }, ref) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
@@ -255,23 +255,49 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         ['link', 'image']
     ]
 
+    function computeFontFamily() {
+        const f = (editorSettings && editorSettings.editorFont) || 'sans-serif'
+        if (f === 'serif') return 'serif'
+        if (f === 'monospace') return 'ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace'
+        return 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial'
+    }
+
+    function computeWordCount(html: string) {
+        try {
+            const div = document.createElement('div')
+            div.innerHTML = html || ''
+            const text = (div.textContent || '').trim()
+            if (!text) return 0
+            return text.split(/\s+/).filter(Boolean).length
+        } catch { return 0 }
+    }
+
+    const containerClass = `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
+
     return (
-        <div className={`${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`}>
+        <div className={containerClass}>
             <div className="mb-3 md:mb-4 flex items-center justify-between">
                 <div className="flex-1 flex items-center gap-4">
-                    <input ref={titleRef} value={title} onChange={e => {
-                        const newTitle = e.target.value
-                        setTitle(newTitle)
-                        const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
-                        setDirty(isDirty)
-                        if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
-                    }} className={`w-full ${focusMode ? 'text-3xl md:text-4xl' : 'text-xl'} font-semibold bg-transparent border-b dark:border-slate-800/30 pb-2 outline-none`} placeholder="Untitled" />
+                    <input
+                        ref={titleRef}
+                        value={title}
+                        onChange={e => {
+                            const newTitle = e.target.value
+                            setTitle(newTitle)
+                            const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
+                            setDirty(isDirty)
+                            if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
+                        }}
+                        className={`w-full ${focusMode ? 'text-3xl md:text-4xl' : 'text-xl'} font-semibold bg-transparent border-b dark:border-slate-800/30 pb-2 outline-none`}
+                        placeholder="Untitled"
+                    />
                     {!focusMode && (
                         <select aria-label="select-folder" className="text-sm border dark:border-slate-800/30 rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
                             {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
                         </select>
                     )}
                 </div>
+
                 {!focusMode && (
                     <div className="relative ml-4">
                         <button onClick={() => setMenuOpen(o => !o)} className="p-2 rounded hover:bg-slate-100" aria-label="Open menu">☰</button>
@@ -282,16 +308,14 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         )}
                     </div>
                 )}
-
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
+                <div style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
                     <ReactQuill
                         theme="snow"
                         value={content}
                         onChange={(val: string) => {
-                            // Normalize the incoming HTML so editor-default markup doesn't mark the note dirty
                             const normalized = normalizeEditorHtml(val)
                             setContent(normalized)
                             const isDirty = title !== initialTitle || normalized !== initialContent
@@ -303,17 +327,26 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         modules={{ toolbar: toolbarConfig }}
                     />
                 </div>
-                <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-end">
-                    <div className="text-sm mr-2 text-slate-500 dark:text-slate-300">
-                        {loading ? 'Saving…' : (lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : '')}
+
+                <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-between">
+                    <div className="flex items-center gap-4">
+                        {editorSettings && editorSettings.showWordCount && (
+                            <div className="text-sm text-slate-500 dark:text-slate-300">Words: {computeWordCount(content)}</div>
+                        )}
                     </div>
-                    <button
-                        className={`px-4 py-2 rounded transition-colors duration-150 ${dirty && !loading ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-700 dark:text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'} ${focusMode && !dirty ? 'opacity-0 pointer-events-none' : ''}`}
-                        onClick={() => handleSave()}
-                        disabled={!dirty || loading}
-                    >
-                        {editingNote ? 'Save changes' : 'Save'}
-                    </button>
+
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm mr-2 text-slate-500 dark:text-slate-300">
+                            {loading ? 'Saving…' : (lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : '')}
+                        </div>
+                        <button
+                            className={`px-4 py-2 rounded transition-colors duration-150 ${dirty && !loading ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-700 dark:text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'} ${focusMode && !dirty ? 'opacity-0 pointer-events-none' : ''}`}
+                            onClick={() => handleSave()}
+                            disabled={!dirty || loading}
+                        >
+                            {editingNote ? 'Save changes' : 'Save'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

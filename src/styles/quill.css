@@ -221,6 +221,15 @@
     padding: 24px 0 32px;
 }
 
+/* Allow the surrounding wrapper to control the editor font via inline style.
+   When the editor is placed inside `.editor-quill-wrapper` the .ql-container
+   and .ql-editor will inherit the font-family. This enables runtime font
+   switching without touching Quill internals. */
+.editor-quill-wrapper .ql-container,
+.editor-quill-wrapper .ql-editor {
+    font-family: inherit !important;
+}
+
 .ql-editor>* {
     cursor: text
 }

@@ -4,6 +4,7 @@ import Editor, { EditorHandle } from './components/Editor'
 import NoteList from './components/NoteList'
 import Auth from './components/Auth'
 import Landing from './pages/Landing'
+import Settings from './components/Settings'
 import { loadSessionFromStorage, getNoteKey } from './lib/session'
 import { getFolders } from './lib/api'
 
@@ -17,11 +18,32 @@ export default function App() {
     const [showingAuth, setShowingAuth] = useState<'none' | 'login' | 'register'>('none')
     const [dirtyNoteIds, setDirtyNoteIds] = useState<Record<string, boolean>>({})
     const [focusMode, setFocusMode] = useState(false)
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    const [settings, setSettings] = useState<any>({ editorFont: 'sans-serif', showWordCount: false })
     const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
     const hideTimerRef = React.useRef<number | null>(null)
     const editorRef = React.useRef<EditorHandle | null>(null)
 
     React.useEffect(() => { loadSessionFromStorage() }, [])
+
+    // Load persisted settings if the session is valid. Try on mount and when auth changes.
+    React.useEffect(() => {
+        let mounted = true
+        async function loadSettings() {
+            try {
+                const res = await (await import('./lib/api')).getSettings()
+                if (!mounted) return
+                if (res && res.ok) {
+                    setSettings(res.settings || { editorFont: 'sans-serif', showWordCount: false })
+                    setAuthed(true)
+                }
+            } catch (_e) {
+                // ignore (not authed or endpoint unavailable)
+            }
+        }
+        loadSettings()
+        return () => { mounted = false }
+    }, [])
 
     // Auto-collapse the sidebar on small screens and keep it responsive to resizes.
     React.useEffect(() => {
@@ -110,6 +132,9 @@ export default function App() {
                                 aria-label="Toggle focus mode"
                             >{focusMode ? 'Exit focus' : 'Focus'}</button>
                         )}
+                        {authed && (
+                            <button className={`px-3 py-1 rounded border text-sm ${focusMode ? 'bg-slate-900 text-white border-slate-900' : ''}`} onClick={() => setSettingsOpen(true)}>Settings</button>
+                        )}
                         {!authed && (
                             <>
                                 <button className="px-3 py-1 rounded border" onClick={async () => {
@@ -160,6 +185,7 @@ export default function App() {
                                 <div className="col-span-1">
                                     <Editor
                                         ref={editorRef}
+                                        editorSettings={settings}
                                         focusMode={focusMode}
                                         editingNote={editingNote}
                                         onSaved={(createdId?: string) => {
@@ -188,6 +214,7 @@ export default function App() {
                     </div>
                 )}
             </main>
+            <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={(s) => setSettings(s)} />
         </div>
     )
 }

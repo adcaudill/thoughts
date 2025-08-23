@@ -58,3 +58,13 @@ export async function deleteNote(id: string) {
     const res = await fetch(`/api/notes/${id}`, { method: 'DELETE', credentials: 'same-origin' })
     return res.json()
 }
+
+export async function getSettings() {
+    const res = await fetch('/api/settings', { credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function updateSettings(payload: any) {
+    const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
+    return res.json()
+}
