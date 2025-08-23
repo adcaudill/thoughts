@@ -82,7 +82,7 @@ router.post('/api/auth/rekey', async request => {
     let payload
     try {
         payload = await verifyJwt(body.token, env.JWT_SECRET || 'dev-secret', 'rekey')
-    } catch (err) {
+    } catch {
         return new Response(JSON.stringify({ ok: false, error: 'invalid or expired token' }), { status: 401 })
     }
 
@@ -117,7 +117,7 @@ router.post('/api/auth/recover/key', async request => {
     let payload
     try {
         payload = await verifyJwt(body.token, env.JWT_SECRET || 'dev-secret', 'rekey')
-    } catch (err) {
+    } catch {
         return new Response(JSON.stringify({ ok: false, error: 'invalid or expired token' }), { status: 401 })
     }
     const userId = payload.sub

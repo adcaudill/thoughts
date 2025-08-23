@@ -134,7 +134,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     const inbox = items.find((x: any) => x.is_default === 1)
                     if (inbox) setSelectedFolder(inbox.id)
                 }
-            } catch (e) {
+            } catch {
                 // ignore
             }
         }

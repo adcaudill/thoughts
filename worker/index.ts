@@ -94,7 +94,7 @@ export default {
                         const r = await (authRouter as any).handle.call(authRouter, fReq as any)
                         if (r) return r
                     }
-                } catch (e) {
+                } catch {
                     return new Response(JSON.stringify({ ok: false, error: 'internal' }), { status: 500 })
                 }
             }
@@ -110,7 +110,7 @@ export default {
                         const r = await (dataRouter as any).handle.call(dataRouter, fReq as any)
                         if (r) return r
                     }
-                } catch (e) {
+                } catch {
                     return new Response(JSON.stringify({ ok: false, error: 'internal' }), { status: 500 })
                 }
             }

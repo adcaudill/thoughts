@@ -185,7 +185,7 @@ router.post('/api/notes', async request => {
         await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(id, userId, folderId, body.title_encrypted || null, body.content_encrypted, body.nonce || null, now, now)
             .run()
-    } catch (err: any) {
+    } catch {
         // Return a controlled error instead of letting the exception bubble as a 500
         return new Response(JSON.stringify({ ok: false, error: 'internal' }), { status: 500 })
     }

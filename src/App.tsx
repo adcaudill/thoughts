@@ -37,7 +37,7 @@ export default function App() {
                     setSettings({ editorFont: 'sans-serif', showWordCount: false, focusCurrentParagraph: false, styleIssues: false, ...(res.settings || {}) })
                     setAuthed(true)
                 }
-            } catch (_e) {
+            } catch {
                 // ignore (not authed or endpoint unavailable)
             }
         }
@@ -57,7 +57,8 @@ export default function App() {
 
     // Keyboard shortcuts for focus mode
     React.useEffect(() => {
-        function onKey(e: KeyboardEvent) {
+        function onKey(_e: KeyboardEvent) {
+            const e = _e
             if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
                 e.preventDefault()
                 setFocusMode(v => !v)
@@ -77,7 +78,7 @@ export default function App() {
                 if (editorRef.current && editorRef.current.isDirty()) {
                     editorRef.current.save()
                 }
-            } catch (_) { }
+            } catch { }
         }, 150)
         return () => window.clearTimeout(t)
     }, [focusMode])
@@ -149,7 +150,7 @@ export default function App() {
                                                 return
                                             }
                                         }
-                                    } catch (_e) {
+                                    } catch {
                                         // ignore and fall through to show login
                                     }
                                     setShowingAuth('login')
@@ -178,7 +179,7 @@ export default function App() {
                                         if (editorRef.current && editorRef.current.isDirty && editorRef.current.isDirty()) {
                                             await editorRef.current.save()
                                         }
-                                    } catch (e) {
+                                    } catch {
                                         // ignore save errors for now but proceed to switch
                                     }
                                     setEditingNote(note)

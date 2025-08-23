@@ -7,7 +7,7 @@ export function base64ToUint8(b64: string): Uint8Array {
     let bin: string
     try {
         bin = atob(s)
-    } catch (err) {
+    } catch {
         throw new Error('invalid base64 input')
     }
     const len = bin.length

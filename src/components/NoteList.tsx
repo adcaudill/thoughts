@@ -27,7 +27,7 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
                             title = decrypted.slice(0, 80)
                         }
                     }
-                } catch (e) {
+                } catch {
                     // ignore decryption errors and fall back to id
                 }
                 items.push({ id: n.id, title })
@@ -51,7 +51,7 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
             } catch {
                 onSelect({ id: j.note.id, title: '', content: decrypted, folder_id: j.note.folder_id })
             }
-        } catch (e) {
+        } catch {
             onSelect({ id })
         }
     }

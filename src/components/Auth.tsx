@@ -117,7 +117,7 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
         // attempt to log the user in using the current username/password
         try {
             await handleLogin(null)
-        } catch (err) {
+        } catch {
             // if login fails, at least switch to login mode so user can try
             setMode('login')
         }
@@ -129,9 +129,9 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
             await navigator.clipboard.writeText(recoveryKey)
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
-        } catch (err) {
+        } catch {
             // fallback to selecting and alerting
-            try { await navigator.clipboard.writeText(recoveryKey) } catch (_) { alert('Copy failed; please select and copy the key manually') }
+            try { await navigator.clipboard.writeText(recoveryKey) } catch { alert('Copy failed; please select and copy the key manually') }
         }
     }
 
@@ -194,7 +194,7 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
                     const decrypted = await decryptNotePayload(oldNoteKey, n.content_encrypted, n.nonce)
                     const { ciphertext, nonce } = await encryptNotePayload(newNoteKey, decrypted)
                     reencrypted_notes.push({ id: n.id, content_encrypted: ciphertext, nonce })
-                } catch (err) {
+                } catch {
                     // skip if decryption fails
                 }
             }
@@ -223,7 +223,7 @@ export default function Auth({ onAuth, initialMode, onCancel }: { onAuth: () => 
             } else {
                 alert('Rekey failed')
             }
-        } catch (err) {
+        } catch {
             setLoading(false)
             alert('Failed to decrypt recovery key or notes')
             return

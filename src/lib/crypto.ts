@@ -38,7 +38,7 @@ export async function deriveClientHash(password: string, salt: Uint8Array) {
             const hash = s.crypto_pwhash(32, pw, salt, s.crypto_pwhash_OPSLIMIT_INTERACTIVE, s.crypto_pwhash_MEMLIMIT_INTERACTIVE, s.crypto_pwhash_ALG_ARGON2ID13)
             return s.to_base64(hash)
         }
-    } catch (e) {
+    } catch {
         // If crypto_pwhash fails for any reason, fail-fast rather than silently falling back to a weaker KDF.
         throw new Error('Argon2 (crypto_pwhash) not available or failed in libsodium build; deriveClientHash requires Argon2 support')
     }
@@ -51,7 +51,7 @@ export function randomSalt() {
         const arr = new Uint8Array(16)
         crypto.getRandomValues(arr)
         return arr
-    } catch (err) {
+    } catch {
         // As a last resort, if Web Crypto isn't available, try to use libsodium if it's already initialized.
         try {
             if (sodiumInstance && (sodiumInstance as any).then) {
@@ -59,7 +59,7 @@ export function randomSalt() {
                 // If sodium is already initialized, it may have been awaited elsewhere; attempt to access cached value via a hack:
                 // NOTE: This is non-ideal; callers should prefer awaiting initSodium() before using crypto requiring sodium.
             }
-        } catch (e) {
+        } catch {
             // ignore and fall through
         }
         // Very unlikely: return a Uint8Array but caller should be aware this is less secure.

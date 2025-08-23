@@ -51,7 +51,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                             const [nonceB64, cipherB64] = val.split('.')
                             const plain = await decryptNotePayload(noteKey, cipherB64, nonceB64)
                             map[folder.id] = plain || 'Untitled'
-                        } catch (e) {
+                        } catch {
                             map[folder.id] = val || 'Untitled'
                         }
                     } else {
@@ -99,7 +99,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
             try {
                 const enc = await encryptNotePayload(noteKey, val)
                 payloadName = `${enc.nonce}.${enc.ciphertext}`
-            } catch (_) {
+            } catch {
                 payloadName = val
             }
         }
@@ -132,7 +132,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                                             try {
                                                 const enc = await encryptNotePayload(noteKey, name)
                                                 payloadName = `${enc.nonce}.${enc.ciphertext}`
-                                            } catch (_) { payloadName = name }
+                                            } catch { payloadName = name }
                                         }
                                         await updateFolder(node.id, { name_encrypted: payloadName })
                                         stopEditing(node.id)
@@ -150,7 +150,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                     </div>
                     <div className="flex items-center gap-2">
                         {!editing && <button aria-label={`rename-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => startEditing(node.id, node.name_encrypted || '')}><i className="fa-solid fa-pen-to-square" aria-hidden="true" /> <span className="sr-only">rename</span></button>}
-                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch (_) { payloadName = name } } await updateFolder(node.id, { name_encrypted: payloadName }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
+                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } await updateFolder(node.id, { name_encrypted: payloadName }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
                         {editing && <button aria-label={`cancel-${node.id}`} className="text-xs text-slate-500" onClick={() => stopEditing(node.id)}><i className="fa-solid fa-xmark" aria-hidden="true" /></button>}
                         {node.is_default !== 1 && <button aria-label={`delete-${node.id}`} className="text-xs text-red-600 flex items-center gap-1" onClick={async () => { if (!confirm('Delete folder? This will move notes to Inbox.')) return; await deleteFolder(node.id); await loadFolders() }}><i className="fa-solid fa-trash" aria-hidden="true" /></button>}
                     </div>
