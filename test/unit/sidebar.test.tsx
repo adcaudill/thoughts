@@ -32,12 +32,13 @@ describe('Sidebar', () => {
         G.fetch = fetchMock
 
         render(<Sidebar noteKey={null} />)
-        expect(screen.getByText(/Loading/i)).toBeInTheDocument()
-
+        // loading state appears first
+        expect(await screen.findByText(/Loading/i)).toBeInTheDocument()
+        // then the folders are shown
         await waitFor(() => expect(screen.queryByText(/Loading/i)).not.toBeInTheDocument())
-        expect(screen.getByText('Inbox')).toBeInTheDocument()
-        expect(screen.getByText('Child')).toBeInTheDocument()
-        expect(screen.getByText('Work')).toBeInTheDocument()
+        expect(await screen.findByText('Inbox')).toBeInTheDocument()
+        expect(await screen.findByText('Child')).toBeInTheDocument()
+        expect(await screen.findByText('Work')).toBeInTheDocument()
     })
 
     it('shows error when API fails', async () => {
@@ -67,13 +68,11 @@ describe('Sidebar', () => {
         G.fetch = fetchMock
 
         render(<Sidebar noteKey={null} />)
-
         const input = await screen.findByPlaceholderText('New folder name') as HTMLInputElement
         const createBtn = screen.getByLabelText('create-folder')
         // set value via change event and click create
         fireEvent.change(input, { target: { value: 'MyFolder' } })
         createBtn.click()
-
         await waitFor(() => expect(screen.getByText('MyFolder')).toBeInTheDocument())
 
         // click rename for the new folder (id from mocked create is 'new1')
