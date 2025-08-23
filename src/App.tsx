@@ -84,7 +84,15 @@ export default function App() {
                                 <div className="col-span-1">
                                     <Editor
                                         editingNote={editingNote}
-                                        onSaved={(_createdId?: string) => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
+                                        onSaved={(createdId?: string) => {
+                                            // Refresh note list, but do NOT clear the editor state.
+                                            setRefreshSignal(v => v + 1)
+                                            // If the editor created a new note, attach the created id to the
+                                            // existing editingNote so subsequent saves patch instead of creating.
+                                            if (createdId) {
+                                                setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
+                                            }
+                                        }}
                                         onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
                                         onDirtyChange={(id: string, dirty: boolean) => {
                                             setDirtyNoteIds(prev => {
