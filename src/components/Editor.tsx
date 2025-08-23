@@ -5,7 +5,7 @@ import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
 
-export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange }: { editingNote?: any; onSaved?: () => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void }) {
+export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange }: { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void }) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
@@ -19,6 +19,10 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
 
     const titleRef = React.useRef<HTMLInputElement | null>(null)
     const [isCompactToolbar, setIsCompactToolbar] = useState(false)
+    // Track save-in-progress to avoid concurrent createNote races
+    const isSavingRef = React.useRef(false)
+    // If we create a note, remember its id so subsequent saves patch instead of creating
+    const createdIdRef = React.useRef<string | null>(null)
 
     // Normalize Quill/HTML content so that editor default placeholder HTML (e.g. "<p><br></p>")
     // is treated as an empty string. This prevents autosave from creating junk notes when
@@ -113,32 +117,52 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange 
     }, [])
 
     async function handleSave(_opts?: { clearAfterSave?: boolean }) {
+        // prevent concurrent saves from racing to create a note twice
+        if (isSavingRef.current) return
+        isSavingRef.current = true
         try {
             setLoading(true)
             const key = getNoteKey()
             if (!key) {
                 setLoading(false)
+                isSavingRef.current = false
                 return
             }
             const payload = JSON.stringify({ title, content })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
-            if (editingNote && editingNote.id) {
+            // prefer an existing id from the prop, else any id we created previously
+            const noteId = (editingNote && editingNote.id) ? editingNote.id : createdIdRef.current
+            if (noteId) {
                 const payloadPatch: any = { content_encrypted: ciphertext, nonce }
                 if (selectedFolder) payloadPatch.folder_id = selectedFolder
-                await updateNote(editingNote.id, payloadPatch)
+                await updateNote(noteId, payloadPatch)
             } else {
-                await createNote({ folder_id: selectedFolder, content_encrypted: ciphertext, nonce })
+                const res = await createNote({ folder_id: selectedFolder, content_encrypted: ciphertext, nonce })
+                // createNote should return the created id; remember it so autosave/manual save don't create duplicates
+                if (res && (res.id || res.note_id || res.note?.id)) {
+                    const id = res.id || res.note_id || (res.note && res.note.id)
+                    createdIdRef.current = id
+                    // notify parent with created id if they want it
+                    if (onSaved) onSaved(id)
+                }
             }
             // notify caller that save completed
-            if (onSaved) onSaved()
+            if (!editingNote && !createdIdRef.current) {
+                // if we created a note but didn't pass id above for some reason, still call onSaved
+                if (onSaved) onSaved()
+            } else if (editingNote) {
+                // for updates, call onSaved without args (parent handles refresh)
+                if (onSaved) onSaved()
+            }
             // mark as saved (don't clear editor)
             setInitialTitle(title)
             setInitialContent(content)
             setDirty(false)
             setLastSavedAt(Date.now())
-            if (onDirtyChange) onDirtyChange(editingNote?.id || '', false)
+            if (onDirtyChange) onDirtyChange((editingNote && editingNote.id) || createdIdRef.current || '', false)
         } finally {
             setLoading(false)
+            isSavingRef.current = false
         }
     }
 

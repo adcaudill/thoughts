@@ -84,7 +84,7 @@ export default function App() {
                                 <div className="col-span-1">
                                     <Editor
                                         editingNote={editingNote}
-                                        onSaved={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
+                                        onSaved={(_createdId?: string) => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
                                         onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
                                         onDirtyChange={(id: string, dirty: boolean) => {
                                             setDirtyNoteIds(prev => {
