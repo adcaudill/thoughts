@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import Sidebar from './components/Sidebar'
-import Editor from './components/Editor'
+import Editor, { EditorHandle } from './components/Editor'
 import NoteList from './components/NoteList'
 import Auth from './components/Auth'
 import Landing from './pages/Landing'
@@ -19,6 +19,7 @@ export default function App() {
     const [focusMode, setFocusMode] = useState(false)
     const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
     const hideTimerRef = React.useRef<number | null>(null)
+    const editorRef = React.useRef<EditorHandle | null>(null)
 
     React.useEffect(() => { loadSessionFromStorage() }, [])
 
@@ -45,6 +46,18 @@ export default function App() {
         }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
+    }, [focusMode])
+
+    // Auto-save on focus mode toggle (debounced slightly to batch rapid toggles)
+    React.useEffect(() => {
+        const t = window.setTimeout(() => {
+            try {
+                if (editorRef.current && editorRef.current.isDirty()) {
+                    editorRef.current.save()
+                }
+            } catch (_) { }
+        }, 150)
+        return () => window.clearTimeout(t)
     }, [focusMode])
 
     // Zen header: hide after inactivity in focus mode; show on interaction
@@ -146,6 +159,7 @@ export default function App() {
                             <div className="grid grid-cols-1 gap-6">
                                 <div className="col-span-1">
                                     <Editor
+                                        ref={editorRef}
                                         focusMode={focusMode}
                                         editingNote={editingNote}
                                         onSaved={(createdId?: string) => {

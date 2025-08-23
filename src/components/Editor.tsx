@@ -1,11 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useImperativeHandle, useState } from 'react'
 import ReactQuill from 'react-quill-new'
 import '../styles/quill.css'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
 
-export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode }: { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean }) {
+export type EditorHandle = {
+    save: () => Promise<void>
+    isDirty: () => boolean
+}
+
+type EditorProps = { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean }
+
+const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode }, ref) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
@@ -46,7 +53,19 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange,
         return raw.replace(/\u200B/g, '').trim()
     }
 
+    const prevNoteIdRef = React.useRef<string | null>(null)
     useEffect(() => {
+        const incomingId: string = editingNote ? (editingNote.id || '') : ''
+        const prevId = prevNoteIdRef.current || ''
+
+        // If we just created a note and parent updated the id to the created one,
+        // do NOT reset local title/content. Keep the current editor state.
+        if (createdIdRef.current && incomingId === createdIdRef.current && (prevId === '' || prevId === createdIdRef.current)) {
+            prevNoteIdRef.current = incomingId
+            if (editingNote && editingNote.folder_id) setSelectedFolder(editingNote.folder_id)
+            return
+        }
+
         if (editingNote) {
             const t = editingNote.title || ''
             const c = normalizeEditorHtml(editingNote.content || '')
@@ -69,6 +88,7 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange,
             setDirty(false)
             if (onDirtyChange) onDirtyChange('', false)
         }
+        prevNoteIdRef.current = incomingId
     }, [editingNote])
 
     useEffect(() => {
@@ -191,6 +211,29 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange,
         return () => window.removeEventListener('keydown', onKey)
     }, [dirty, loading, title, content, selectedFolder, editingNote])
 
+    // Warn on navigation if there's an unsaved NEW note (no id yet) and changes exist
+    useEffect(() => {
+        function beforeUnload(e: BeforeUnloadEvent) {
+            if (!editingNote || editingNote.id) return
+            if (!dirty) return
+            e.preventDefault()
+            e.returnValue = ''
+        }
+        if (!editingNote || editingNote.id) return
+        if (dirty) {
+            window.addEventListener('beforeunload', beforeUnload)
+        }
+        return () => {
+            window.removeEventListener('beforeunload', beforeUnload)
+        }
+    }, [editingNote && editingNote.id, dirty])
+
+    // Expose imperative API
+    useImperativeHandle(ref, () => ({
+        save: async () => { await handleSave().catch(() => { }) },
+        isDirty: () => dirty,
+    }), [dirty, title, content, selectedFolder, editingNote])
+
     async function handleDelete() {
         if (!editingNote || !editingNote.id) return
         setLoading(true)
@@ -275,4 +318,6 @@ export default function Editor({ editingNote, onSaved, onDeleted, onDirtyChange,
             </div>
         </div>
     )
-}
+})
+
+export default Editor
