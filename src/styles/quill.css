@@ -106,6 +106,11 @@
         border-color: rgba(255, 255, 255, 0.08) !important;
     }
 
+    .ql-toolbar.ql-snow,
+    .ql-container.ql-snow {
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+
     .ql-snow .ql-toolbar {
         border-bottom-color: rgba(255, 255, 255, 0.06) !important;
         background: transparent;

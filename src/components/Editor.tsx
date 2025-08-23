@@ -286,7 +286,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-white/10'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
+                <div className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
                     <ReactQuill
                         theme="snow"
                         value={content}
