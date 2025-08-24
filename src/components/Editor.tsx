@@ -57,9 +57,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     useEffect(() => {
         const incomingId: string = editingNote ? (editingNote.id || '') : ''
         const prevId = prevNoteIdRef.current || ''
-    const isSameNote = prevId === incomingId
-    // Consider blank-id -> newly created id as the same logical note during rollover
-    const sameLogicalNote = isSameNote || (prevId === '' && createdIdRef.current === incomingId)
+        const isSameNote = prevId === incomingId
+        // Consider blank-id -> newly created id as the same logical note during rollover
+        const sameLogicalNote = isSameNote || (prevId === '' && createdIdRef.current === incomingId)
 
         // If a create is in-flight, parent may emit the new id; don't apply while pending
         if (createdIdRef.current && pendingCreateRef.current && (prevId === '' || prevId === createdIdRef.current)) {
@@ -68,7 +68,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             return
         }
 
-    if (editingNote) {
+        if (editingNote) {
             if (editingNote.id) {
                 stableNoteIdRef.current = editingNote.id
             }
