@@ -28,6 +28,12 @@ export function useReadingStats(content: string, enabled: boolean) {
     const [readingTimeMin, setReadingTimeMin] = useState<number | null>(null)
     const [readingDifficulty, setReadingDifficulty] = useState<Difficulty | null>(null)
     const [fleschScore, setFleschScore] = useState<number | null>(null)
+    const [sentences, setSentences] = useState<number>(0)
+    const [syllables, setSyllables] = useState<number>(0)
+    // compute characters (no spaces) locally to avoid depending on library behaviour
+    const characters = String(content || '').replace(/\s+/g, '').length
+    const [fleschKincaid, setFleschKincaid] = useState<number | null>(null)
+    const [automatedReadabilityIndex, setAutomatedReadabilityIndex] = useState<number | null>(null)
 
     const words = computeWordCount(content)
 
@@ -40,7 +46,15 @@ export function useReadingStats(content: string, enabled: boolean) {
                 const mod = await import('text-readability') as any
                 const rs = (mod && mod.default) ? mod.default : mod
                 const flesch = (rs && typeof rs.fleschReadingEase === 'function') ? rs.fleschReadingEase(String(content || '')) : null
+                const sents = (rs && typeof rs.sentenceCount === 'function') ? rs.sentenceCount(String(content || '')) : 0
+                const syl = (rs && typeof rs.syllableCount === 'function') ? rs.syllableCount(String(content || '')) : 0
+                const fk = (rs && typeof rs.fleschKincaidGrade === 'function') ? rs.fleschKincaidGrade(String(content || '')) : null
+                const ari = (rs && typeof rs.automatedReadabilityIndex === 'function') ? rs.automatedReadabilityIndex(String(content || '')) : null
                 if (cancelled) return
+                setSentences(sents || 0)
+                setSyllables(syl || 0)
+                setFleschKincaid(typeof fk === 'number' && isFinite(fk) ? fk : null)
+                setAutomatedReadabilityIndex(typeof ari === 'number' && isFinite(ari) ? ari : null)
                 if (typeof flesch === 'number' && isFinite(flesch)) {
                     const est = estimate(words, flesch)
                     setReadingTimeMin(est.minutes)
@@ -61,5 +75,5 @@ export function useReadingStats(content: string, enabled: boolean) {
         return () => { cancelled = true; window.clearTimeout(t) }
     }, [content, enabled, words])
 
-    return { words, readingTimeMin, readingDifficulty, fleschScore }
+    return { words, readingTimeMin, readingDifficulty, fleschScore, sentences, syllables, characters, fleschKincaid, automatedReadabilityIndex }
 }

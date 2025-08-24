@@ -3,9 +3,12 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import '../styles/editor.css'
-import { useReadingStats, computeWordCount } from '../hooks/useReadingStats'
+import { useReadingStats } from '../hooks/useReadingStats'
 import { useStyleIssuesExt } from '../hooks/useStyleIssuesExt'
 import { useFocusParagraphExt } from '../hooks/useFocusParagraphExt'
+import EditorHeader from './EditorHeader'
+import EditorStatusBar from './EditorStatusBar'
+import NoteInfoDialog from './NoteInfoDialog'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
@@ -25,7 +28,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const [initialTitle, setInitialTitle] = useState('')
     const [initialContent, setInitialContent] = useState('')
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
-    const [menuOpen, setMenuOpen] = useState(false)
+    // header menu is handled by EditorHeader
     const [folders, setFolders] = useState<Array<any>>([])
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined)
 
@@ -249,7 +252,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(203,213,225,0.85)' }
     }, { dark: true }), [])
 
-    const { words, readingTimeMin, readingDifficulty, fleschScore } = useReadingStats(content, !!(editorSettings && editorSettings.showReadingTime))
+    const { words, readingTimeMin, readingDifficulty, fleschScore, sentences, syllables, characters, fleschKincaid, automatedReadabilityIndex } = useReadingStats(content, !!(editorSettings && editorSettings.showReadingTime))
+    const [noteInfoOpen, setNoteInfoOpen] = useState(false)
 
     const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
     const focusParagraphExt = useFocusParagraphExt(!!(editorSettings && editorSettings.focusCurrentParagraph), content)
@@ -258,59 +262,46 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
     return (
         <div className={containerClass}>
-            <div className="mb-3 md:mb-4 flex items-center justify-between">
-                <div className="flex-1 flex items-center gap-4">
-                    <input
-                        ref={titleRef}
-                        value={title}
-                        onChange={e => {
-                            const newTitle = e.target.value
-                            setTitle(newTitle)
-                            const isDirty = newTitle !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
-                            setDirty(isDirty)
-                            onDirtyChange?.(editingNote?.id || '', isDirty)
-                        }}
-                        className={`w-full ${focusMode ? 'text-3xl md:text-4xl' : 'text-xl'} font-semibold bg-transparent border-b dark:border-slate-800/30 pb-2 outline-none`}
-                        placeholder="Untitled"
-                    />
-                    {!focusMode && (
-                        <select
-                            aria-label="select-folder"
-                            className="text-sm border dark:border-slate-800/30 rounded px-2 py-1"
-                            value={selectedFolder}
-                            onChange={async e => {
-                                const newFolder = e.target.value || undefined
-                                setSelectedFolder(newFolder)
-                                const prev = prevSelectedFolderRef.current
-                                // Only trigger a save when the selected folder truly changed
-                                if (prev !== newFolder) {
-                                    prevSelectedFolderRef.current = newFolder
-                                    // mark dirty so save button state reflects change
-                                    const isDirty = title !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
-                                    setDirty(isDirty)
-                                    onDirtyChange?.(editingNote?.id || '', isDirty)
-                                    // Trigger save immediately using the newly-selected folder (don't await to avoid blocking UI)
-                                    handleSave({ folderId: newFolder }).catch(() => { })
-                                }
-                            }}
-                            disabled={folders.length === 0}
-                        >
-                            {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
-                        </select>
-                    )}
-                </div>
+            <EditorHeader
+                title={title}
+                titleRef={titleRef}
+                onTitleChange={(newTitle) => {
+                    setTitle(newTitle)
+                    const isDirty = newTitle !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
+                    setDirty(isDirty)
+                    onDirtyChange?.(editingNote?.id || '', isDirty)
+                }}
+                focusMode={focusMode}
+                selectedFolder={selectedFolder}
+                onFolderSelect={async (newFolder) => {
+                    setSelectedFolder(newFolder)
+                    const prev = prevSelectedFolderRef.current
+                    if (prev !== newFolder) {
+                        prevSelectedFolderRef.current = newFolder
+                        const isDirty = title !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
+                        setDirty(isDirty)
+                        onDirtyChange?.(editingNote?.id || '', isDirty)
+                        handleSave({ folderId: newFolder }).catch(() => { })
+                    }
+                }}
+                folders={folders}
+                onDelete={() => handleDelete()}
+                onOpenNoteInfo={() => setNoteInfoOpen(true)}
+            />
 
-                {!focusMode && (
-                    <div className="relative ml-4">
-                        <button onClick={() => setMenuOpen(o => !o)} className="p-2 rounded hover:bg-slate-100" aria-label="Open menu">☰</button>
-                        {menuOpen && (
-                            <div className="absolute right-0 mt-2 w-40 bg-white border dark:border-slate-800/30 rounded shadow-md z-10">
-                                <button className="w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { setMenuOpen(false); handleDelete() }}>Delete</button>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+            <NoteInfoDialog
+                open={noteInfoOpen}
+                onClose={() => setNoteInfoOpen(false)}
+                words={words}
+                sentences={sentences}
+                syllables={syllables}
+                characters={characters}
+                fleschScore={fleschScore}
+                fleschKincaid={fleschKincaid}
+                automatedReadabilityIndex={automatedReadabilityIndex}
+                readingTimeMin={readingTimeMin}
+                readingDifficulty={readingDifficulty}
+            />
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
                 <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-cm-wrapper flex-1 safe-area ${editorSettings && editorSettings.focusCurrentParagraph ? 'cm-focus-current' : ''} ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
@@ -335,35 +326,17 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     />
                 </div>
 
-                <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-between">
-                    <div className="flex items-center gap-4">
-                        {editorSettings && (editorSettings.showWordCount || editorSettings.showReadingTime) && (
-                            <div className="text-sm text-slate-500 dark:text-slate-300 flex items-center gap-3">
-                                {editorSettings.showWordCount && (
-                                    <div>Words: {words}</div>
-                                )}
-                                {editorSettings.showReadingTime && (
-                                    <div title={fleschScore != null ? `Flesch Reading Ease: ${fleschScore.toFixed(1)}` : undefined}>
-                                        Read: {readingTimeMin ?? Math.ceil(computeWordCount(content) / 200)} min{readingDifficulty ? ` (${readingDifficulty})` : ''}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <div className="text-sm mr-2 text-slate-500 dark:text-slate-300">
-                            {loading ? 'Saving…' : (lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : '')}
-                        </div>
-                        <button
-                            className={`px-4 py-2 rounded transition-colors duration-150 ${dirty && !loading ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-700 dark:text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'} ${focusMode && !dirty ? 'opacity-0 pointer-events-none' : ''}`}
-                            onClick={() => handleSave()}
-                            disabled={!dirty || loading}
-                        >
-                            {editingNote ? 'Save changes' : 'Save'}
-                        </button>
-                    </div>
-                </div>
+                <EditorStatusBar
+                    editorSettings={editorSettings}
+                    words={words}
+                    readingTimeMin={readingTimeMin ?? null}
+                    readingDifficulty={readingDifficulty}
+                    fleschScore={fleschScore}
+                    loading={loading}
+                    lastSavedAt={lastSavedAt}
+                    dirty={dirty}
+                    onSave={() => handleSave()}
+                />
             </div>
         </div>
     )
