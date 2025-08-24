@@ -7,6 +7,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
     const [loading, setLoading] = useState(false)
     const [editorFont, setEditorFont] = useState<'sans-serif' | 'serif' | 'monospace'>('sans-serif')
     const [showWordCount, setShowWordCount] = useState(false)
+    const [showReadingTime, setShowReadingTime] = useState(false)
     const [dirty, setDirty] = useState(false)
     const [focusCurrentParagraph, setFocusCurrentParagraph] = useState(false)
     const [styleIssues, setStyleIssues] = useState(false)
@@ -21,6 +22,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 const s = res.settings || {}
                 if (s.editorFont) setEditorFont(s.editorFont)
                 if (typeof s.showWordCount === 'boolean') setShowWordCount(s.showWordCount)
+                if (typeof s.showReadingTime === 'boolean') setShowReadingTime(s.showReadingTime)
                 if (typeof s.focusCurrentParagraph === 'boolean') setFocusCurrentParagraph(s.focusCurrentParagraph)
                 if (typeof s.styleIssues === 'boolean') setStyleIssues(s.styleIssues)
                 setDirty(false)
@@ -31,7 +33,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
 
     async function save() {
         setLoading(true)
-        const payload = { editorFont, showWordCount, focusCurrentParagraph, styleIssues }
+        const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues }
         const res = await updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
@@ -66,6 +68,13 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                             <input type="checkbox" checked={showWordCount} onChange={e => { setShowWordCount(e.target.checked); setDirty(true) }} />
                             <span className="text-sm">Show word count</span>
                         </label>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={showReadingTime} onChange={e => { setShowReadingTime(e.target.checked); setDirty(true) }} />
+                            <span className="text-sm">Show reading time</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">Display an estimated reading time for your note (based on ~200 words/min).</p>
                     </div>
                     <div>
                         <label className="flex items-center gap-2">

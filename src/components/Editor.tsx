@@ -258,6 +258,14 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return t.split(' ').length
     }
 
+    function computeReadingTime(md: string, wordsPerMinute = 200) {
+        const words = computeWordCount(md)
+        if (!words) return 0
+        // round to nearest half-minute for friendliness
+        const minutes = words / wordsPerMinute
+        return Math.max(0.5, Math.round(minutes * 2) / 2)
+    }
+
     // --- Style issues via decorations ---
     function buildStyleIssuesRegex(): RegExp {
         const fillers = [
@@ -421,8 +429,15 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
                 <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-between">
                     <div className="flex items-center gap-4">
-                        {editorSettings && editorSettings.showWordCount && (
-                            <div className="text-sm text-slate-500 dark:text-slate-300">Words: {computeWordCount(content)}</div>
+                        {editorSettings && (editorSettings.showWordCount || editorSettings.showReadingTime) && (
+                            <div className="text-sm text-slate-500 dark:text-slate-300 flex items-center gap-3">
+                                {editorSettings.showWordCount && (
+                                    <div>Words: {computeWordCount(content)}</div>
+                                )}
+                                {editorSettings.showReadingTime && (
+                                    <div>Read: {computeReadingTime(content)} min</div>
+                                )}
+                            </div>
                         )}
                     </div>
 
