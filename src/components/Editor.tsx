@@ -1,9 +1,11 @@
 import React, { useEffect, useImperativeHandle, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view'
-import { RangeSetBuilder } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import '../styles/editor.css'
+import { useReadingStats, computeWordCount } from '../hooks/useReadingStats'
+import { useStyleIssuesExt } from '../hooks/useStyleIssuesExt'
+import { useFocusParagraphExt } from '../hooks/useFocusParagraphExt'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
@@ -247,145 +249,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(203,213,225,0.85)' }
     }, { dark: true }), [])
 
-    function computeWordCount(md: string) {
-        const t = String(md || '')
-            .replace(/```[\s\S]*?```/g, ' ') // fenced code
-            .replace(/`[^`]*`/g, ' ') // inline code
-            .replace(/\[[^\]]*\]\([^)]*\)/g, ' ') // links/images
-            .replace(/[>#*_\-\[\]()`~]/g, ' ') // punctuation
-            .replace(/\s+/g, ' ').trim()
-        if (!t) return 0
-        return t.split(' ').length
-    }
+    const { words, readingTimeMin, readingDifficulty, fleschScore } = useReadingStats(content, !!(editorSettings && editorSettings.showReadingTime))
 
-    // Derived reading-time and difficulty (debounced computation)
-    const [readingTimeMin, setReadingTimeMin] = useState<number | null>(null)
-    const [readingDifficulty, setReadingDifficulty] = useState<'very easy' | 'standard' | 'difficult' | 'very difficult' | null>(null)
-    const [fleschScore, setFleschScore] = useState<number | null>(null)
-
-    function estimateReadingTime(words: number, flesch: number): { minutes: number, label: 'very easy' | 'standard' | 'difficult' | 'very difficult' } {
-        let wpm: number
-        let label: 'very easy' | 'standard' | 'difficult' | 'very difficult'
-        if (flesch > 80) { wpm = 250; label = 'very easy' }
-        else if (flesch > 60) { wpm = 200; label = 'standard' }
-        else if (flesch > 30) { wpm = 150; label = 'difficult' }
-        else { wpm = 75; label = 'very difficult' }
-        const minutes = Math.ceil(words / Math.max(1, wpm))
-        return { minutes, label }
-    }
-
-    useEffect(() => {
-        if (!(editorSettings && editorSettings.showReadingTime)) { setReadingTimeMin(null); setReadingDifficulty(null); setFleschScore(null); return }
-        const words = computeWordCount(content)
-        if (!words) { setReadingTimeMin(0); setReadingDifficulty(null); setFleschScore(null); return }
-        let cancelled = false
-        const t = window.setTimeout(async () => {
-            try {
-                const mod = await import('text-readability') as any
-                const rs = (mod && mod.default) ? mod.default : mod
-                const flesch = (rs && typeof rs.fleschReadingEase === 'function') ? rs.fleschReadingEase(String(content || '')) : null
-                if (cancelled) return
-                if (typeof flesch === 'number' && isFinite(flesch)) {
-                    const est = estimateReadingTime(words, flesch)
-                    setReadingTimeMin(est.minutes)
-                    setReadingDifficulty(est.label)
-                    setFleschScore(flesch)
-                } else {
-                    // fallback: assume 200 wpm
-                    setReadingTimeMin(Math.ceil(words / 200))
-                    setReadingDifficulty(null)
-                    setFleschScore(null)
-                }
-            } catch {
-                if (cancelled) return
-                setReadingTimeMin(Math.ceil(words / 200))
-                setReadingDifficulty(null)
-                setFleschScore(null)
-            }
-        }, 2000) // debounce to avoid running on every keystroke
-        return () => { cancelled = true; window.clearTimeout(t) }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [content, editorSettings && editorSettings.showReadingTime])
-
-    // --- Style issues via decorations ---
-    function buildStyleIssuesRegex(): RegExp {
-        const fillers = [
-            'actually', 'basically', 'pretty much', 'sort of', 'kind of', 'really', 'very', 'quite', 'rather', 'somewhat', 'just', 'literally'
-        ]
-        const redundancies = [
-            'basic fundamentals', 'close proximity', 'end result', 'free gift', 'final outcome', 'past history', 'advance planning', 'added bonus', 'plan ahead', 'revert back', 'unexpected surprise', 'true facts', 'fall down', 'combine together', 'join together'
-        ]
-        const cliches = [
-            'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
-        ]
-        const escape = (s: string) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
-        const parts = [...fillers, ...redundancies].map(escape).map(s => `\\b${s}\\b`).concat(cliches)
-        return new RegExp(parts.join('|'), 'gi')
-    }
-
-    const styleIssuesExt = React.useMemo(() => {
-        if (!(editorSettings && editorSettings.styleIssues)) return [] as any
-        const pattern = buildStyleIssuesRegex()
-        return [
-            ViewPlugin.fromClass(class {
-                decorations: DecorationSet
-                constructor(view: EditorView) { this.decorations = this.build(view) }
-                update(update: ViewUpdate) {
-                    if (update.docChanged || update.viewportChanged) this.decorations = this.build(update.view)
-                }
-                build(view: EditorView) {
-                    const builder = new RangeSetBuilder<Decoration>()
-                    const deco = Decoration.mark({ class: 'cm-style-issue' })
-                    const text = view.state.doc.toString()
-                    pattern.lastIndex = 0
-                    let m: RegExpExecArray | null
-                    while ((m = pattern.exec(text))) {
-                        builder.add(m.index, m.index + m[0].length, deco)
-                        if (pattern.lastIndex === m.index) pattern.lastIndex++
-                    }
-                    return builder.finish()
-                }
-            }, { decorations: v => v.decorations })
-        ]
-    }, [editorSettings && editorSettings.styleIssues, content])
-
-    const focusParagraphExt = React.useMemo(() => {
-        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return [] as any
-        return [
-            ViewPlugin.fromClass(class {
-                decorations: DecorationSet
-                constructor(view: EditorView) { this.decorations = this.build(view) }
-                update(update: ViewUpdate) {
-                    if (update.selectionSet || update.docChanged) this.decorations = this.build(update.view)
-                }
-                build(view: EditorView) {
-                    const sel = view.state.selection.main
-                    const head = sel.head
-                    const doc = view.state.doc
-                    const cur = doc.lineAt(head)
-                    let start = cur.number
-                    for (let n = cur.number; n >= 1; n--) {
-                        const ln = doc.line(n)
-                        if (ln.text.trim() === '' && n !== cur.number) { start = n + 1; break }
-                        if (n === 1) start = 1
-                    }
-                    let end = cur.number
-                    for (let n = cur.number; n <= doc.lines; n++) {
-                        const ln = doc.line(n)
-                        if (ln.text.trim() === '' && n !== cur.number) { end = n - 1; break }
-                        if (n === doc.lines) end = doc.lines
-                    }
-                    const builder = new RangeSetBuilder<Decoration>()
-                    const lineDeco = Decoration.line({ class: 'cm-active-paragraph' })
-                    for (let n = start; n <= end; n++) {
-                        const ln = doc.line(n)
-                        builder.add(ln.from, ln.from, lineDeco)
-                    }
-                    return builder.finish()
-                }
-            }, { decorations: v => v.decorations })
-        ]
-    }, [editorSettings && editorSettings.focusCurrentParagraph, content])
+    const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
+    const focusParagraphExt = useFocusParagraphExt(!!(editorSettings && editorSettings.focusCurrentParagraph), content)
 
     const containerClass = `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
 
@@ -473,7 +340,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         {editorSettings && (editorSettings.showWordCount || editorSettings.showReadingTime) && (
                             <div className="text-sm text-slate-500 dark:text-slate-300 flex items-center gap-3">
                                 {editorSettings.showWordCount && (
-                                    <div>Words: {computeWordCount(content)}</div>
+                                    <div>Words: {words}</div>
                                 )}
                                 {editorSettings.showReadingTime && (
                                     <div title={fleschScore != null ? `Flesch Reading Ease: ${fleschScore.toFixed(1)}` : undefined}>
