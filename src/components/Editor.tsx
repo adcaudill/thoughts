@@ -38,6 +38,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
     // Track save-in-progress to avoid concurrent createNote races
     const isSavingRef = React.useRef(false)
+    // keep refs for dirty/loading so the autosave interval sees current values
+    const dirtyRef = React.useRef(dirty)
+    const loadingRef = React.useRef(loading)
     // If we create a note, remember its id so subsequent saves patch instead of creating
     const createdIdRef = React.useRef<string | null>(null)
     const prevNoteIdRef = React.useRef<string | null>(null)
@@ -167,15 +170,19 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         onDeleted?.()
     }
 
-    // Autosave every 30 seconds when dirty
+    // Keep refs in sync with state so the interval callback can read latest values
+    useEffect(() => { dirtyRef.current = dirty }, [dirty])
+    useEffect(() => { loadingRef.current = loading }, [loading])
+
+    // Autosave every 30 seconds when dirty. Use a single interval created on mount
+    // and read operations from refs to avoid stale closures and frequent resets.
     useEffect(() => {
-        if (!dirty) return
         const interval = window.setInterval(() => {
-            if (!dirty || loading) return
+            if (!dirtyRef.current || loadingRef.current) return
             handleSave().catch(() => { })
         }, 30_000)
         return () => window.clearInterval(interval)
-    }, [dirty, loading, title, content, selectedFolder, editingNote])
+    }, [])
 
     // Keyboard shortcut: Cmd/Ctrl+S
     useEffect(() => {
