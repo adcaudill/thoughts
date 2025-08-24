@@ -36,6 +36,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     // If we create a note, remember its id so subsequent saves patch instead of creating
     const createdIdRef = React.useRef<string | null>(null)
     const prevNoteIdRef = React.useRef<string | null>(null)
+    // Track the previously-selected folder so switching to the same folder doesn't retrigger a save
+    const prevSelectedFolderRef = React.useRef<string | undefined>(undefined)
 
     // Normalize Markdown content
     function normalizeContent(md: string | null | undefined) {
@@ -62,7 +64,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             setInitialContent(c)
             setDirty(false)
             onDirtyChange?.(editingNote.id || '', false)
-            if (editingNote.folder_id) setSelectedFolder(editingNote.folder_id)
+            if (editingNote.folder_id) {
+                setSelectedFolder(editingNote.folder_id)
+                prevSelectedFolderRef.current = editingNote.folder_id
+            }
             if (!editingNote.id && titleRef.current) titleRef.current.focus()
         } else {
             setTitle('')
@@ -108,7 +113,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         loadFolders()
     }, [])
 
-    async function handleSave(_opts?: { clearAfterSave?: boolean }) {
+    async function handleSave(_opts?: { clearAfterSave?: boolean, folderId?: string | undefined }) {
         if (isSavingRef.current) return
         isSavingRef.current = true
         try {
@@ -117,13 +122,14 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             if (!key) { setLoading(false); isSavingRef.current = false; return }
             const payload = JSON.stringify({ title, content })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
+            const folderToUse = (_opts && Object.prototype.hasOwnProperty.call(_opts, 'folderId')) ? _opts!.folderId : selectedFolder
             const noteId = (editingNote && editingNote.id) ? editingNote.id : createdIdRef.current
             if (noteId) {
                 const payloadPatch: any = { content_encrypted: ciphertext, nonce }
-                if (selectedFolder) payloadPatch.folder_id = selectedFolder
+                if (folderToUse) payloadPatch.folder_id = folderToUse
                 await updateNote(noteId, payloadPatch)
             } else {
-                const res = await createNote({ folder_id: selectedFolder, content_encrypted: ciphertext, nonce })
+                const res = await createNote({ folder_id: folderToUse, content_encrypted: ciphertext, nonce })
                 if (res && (res.id || res.note_id || res.note?.id)) {
                     const id = res.id || res.note_id || (res.note && res.note.id)
                     createdIdRef.current = id
@@ -352,7 +358,27 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         placeholder="Untitled"
                     />
                     {!focusMode && (
-                        <select aria-label="select-folder" className="text-sm border dark:border-slate-800/30 rounded px-2 py-1" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)} disabled={folders.length === 0}>
+                        <select
+                            aria-label="select-folder"
+                            className="text-sm border dark:border-slate-800/30 rounded px-2 py-1"
+                            value={selectedFolder}
+                            onChange={async e => {
+                                const newFolder = e.target.value || undefined
+                                setSelectedFolder(newFolder)
+                                const prev = prevSelectedFolderRef.current
+                                // Only trigger a save when the selected folder truly changed
+                                if (prev !== newFolder) {
+                                    prevSelectedFolderRef.current = newFolder
+                                    // mark dirty so save button state reflects change
+                                    const isDirty = title !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
+                                    setDirty(isDirty)
+                                    onDirtyChange?.(editingNote?.id || '', isDirty)
+                                    // Trigger save immediately using the newly-selected folder (don't await to avoid blocking UI)
+                                    handleSave({ folderId: newFolder }).catch(() => { })
+                                }
+                            }}
+                            disabled={folders.length === 0}
+                        >
                             {folders.map(f => <option key={f.id} value={f.id}>{f.displayName || f.name_encrypted || 'Untitled'}</option>)}
                         </select>
                     )}
