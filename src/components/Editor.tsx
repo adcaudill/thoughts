@@ -258,13 +258,54 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return t.split(' ').length
     }
 
-    function computeReadingTime(md: string, wordsPerMinute = 200) {
-        const words = computeWordCount(md)
-        if (!words) return 0
-        // round to nearest half-minute for friendliness
-        const minutes = words / wordsPerMinute
-        return Math.max(0.5, Math.round(minutes * 2) / 2)
+    // Derived reading-time and difficulty (debounced computation)
+    const [readingTimeMin, setReadingTimeMin] = useState<number | null>(null)
+    const [readingDifficulty, setReadingDifficulty] = useState<'very easy' | 'standard' | 'difficult' | 'very difficult' | null>(null)
+    const [fleschScore, setFleschScore] = useState<number | null>(null)
+
+    function estimateReadingTime(words: number, flesch: number): { minutes: number, label: 'very easy' | 'standard' | 'difficult' | 'very difficult' } {
+        let wpm: number
+        let label: 'very easy' | 'standard' | 'difficult' | 'very difficult'
+        if (flesch > 80) { wpm = 250; label = 'very easy' }
+        else if (flesch > 60) { wpm = 200; label = 'standard' }
+        else if (flesch > 30) { wpm = 150; label = 'difficult' }
+        else { wpm = 75; label = 'very difficult' }
+        const minutes = Math.ceil(words / Math.max(1, wpm))
+        return { minutes, label }
     }
+
+    useEffect(() => {
+        if (!(editorSettings && editorSettings.showReadingTime)) { setReadingTimeMin(null); setReadingDifficulty(null); setFleschScore(null); return }
+        const words = computeWordCount(content)
+        if (!words) { setReadingTimeMin(0); setReadingDifficulty(null); setFleschScore(null); return }
+        let cancelled = false
+        const t = window.setTimeout(async () => {
+            try {
+                const mod = await import('text-readability') as any
+                const rs = (mod && mod.default) ? mod.default : mod
+                const flesch = (rs && typeof rs.fleschReadingEase === 'function') ? rs.fleschReadingEase(String(content || '')) : null
+                if (cancelled) return
+                if (typeof flesch === 'number' && isFinite(flesch)) {
+                    const est = estimateReadingTime(words, flesch)
+                    setReadingTimeMin(est.minutes)
+                    setReadingDifficulty(est.label)
+                    setFleschScore(flesch)
+                } else {
+                    // fallback: assume 200 wpm
+                    setReadingTimeMin(Math.ceil(words / 200))
+                    setReadingDifficulty(null)
+                    setFleschScore(null)
+                }
+            } catch {
+                if (cancelled) return
+                setReadingTimeMin(Math.ceil(words / 200))
+                setReadingDifficulty(null)
+                setFleschScore(null)
+            }
+        }, 2000) // debounce to avoid running on every keystroke
+        return () => { cancelled = true; window.clearTimeout(t) }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [content, editorSettings && editorSettings.showReadingTime])
 
     // --- Style issues via decorations ---
     function buildStyleIssuesRegex(): RegExp {
@@ -435,7 +476,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                                     <div>Words: {computeWordCount(content)}</div>
                                 )}
                                 {editorSettings.showReadingTime && (
-                                    <div>Read: {computeReadingTime(content)} min</div>
+                                    <div title={fleschScore != null ? `Flesch Reading Ease: ${fleschScore.toFixed(1)}` : undefined}>
+                                        Read: {readingTimeMin ?? Math.ceil(computeWordCount(content) / 200)} min{readingDifficulty ? ` (${readingDifficulty})` : ''}
+                                    </div>
                                 )}
                             </div>
                         )}

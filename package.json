@@ -31,6 +31,7 @@
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-markdown": "^10.1.0",
+        "text-readability": "^1.1.1",
         "uuid": "^11.1.0",
         "wrangler": "^4.32.0"
     },
