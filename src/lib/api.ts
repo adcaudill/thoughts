@@ -44,7 +44,7 @@ export async function getNotes(folderId?: string) {
     return res.json()
 }
 
-export async function createNote(payload: { folder_id?: string; title_encrypted?: string; content_encrypted: string; nonce?: string; word_count?: number }) {
+export async function createNote(payload: { id?: string; folder_id?: string; title_encrypted?: string; content_encrypted: string; nonce?: string; word_count?: number }) {
     const res = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
     return res.json()
 }

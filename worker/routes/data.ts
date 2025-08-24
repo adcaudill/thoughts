@@ -180,14 +180,19 @@ router.post('/api/notes', async request => {
         }
     }
 
-    const id = uuidv4()
+    const id = (body && body.id) ? String(body.id) : uuidv4()
     const now = new Date().toISOString()
     try {
         await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(id, userId, folderId, body.title_encrypted || null, body.content_encrypted, body.nonce || null, now, now, body.word_count ?? 0)
             .run()
     } catch {
-        // Return a controlled error instead of letting the exception bubble as a 500
+        // If note already exists (e.g., duplicate create), return ok with the same id
+        const existing = await db.prepare('SELECT id FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
+        if (existing) {
+            return new Response(JSON.stringify({ ok: true, id }), { status: 200 })
+        }
+        // Otherwise return a controlled error
         return new Response(JSON.stringify({ ok: false, error: 'internal' }), { status: 500 })
     }
     return new Response(JSON.stringify({ ok: true, id }), { status: 201 })

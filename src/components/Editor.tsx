@@ -28,7 +28,6 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const [initialTitle, setInitialTitle] = useState('')
     const [initialContent, setInitialContent] = useState('')
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
-    // header menu is handled by EditorHeader
     const [folders, setFolders] = useState<Array<any>>([])
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined)
 
@@ -36,42 +35,72 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const wrapperRef = React.useRef<HTMLDivElement | null>(null)
     const cmViewRef = React.useRef<EditorView | null>(null)
 
-    // Track save-in-progress to avoid concurrent createNote races
+    // Refs and guards
     const isSavingRef = React.useRef(false)
-    // keep refs for dirty/loading so the autosave interval sees current values
     const dirtyRef = React.useRef(dirty)
     const loadingRef = React.useRef(loading)
-    // If we create a note, remember its id so subsequent saves patch instead of creating
     const createdIdRef = React.useRef<string | null>(null)
+    // The canonical id for the currently-open note (server id if available)
+    const stableNoteIdRef = React.useRef<string | null>(null)
     const prevNoteIdRef = React.useRef<string | null>(null)
-    // Track the previously-selected folder so switching to the same folder doesn't retrigger a save
+    const pendingCreateRef = React.useRef<Promise<any> | null>(null)
+    const savedContentRef = React.useRef<string | null>(null)
     const prevSelectedFolderRef = React.useRef<string | undefined>(undefined)
 
-    // Normalize Markdown content
     function normalizeContent(md: string | null | undefined) {
         if (md == null) return ''
-        return String(md).replace(/\u200B/g, '').trim()
+        // Remove zero-width spaces but keep exact whitespace; don't trim.
+        return String(md).replace(/\u200B/g, '')
     }
 
+    // Sync incoming editingNote
     useEffect(() => {
         const incomingId: string = editingNote ? (editingNote.id || '') : ''
         const prevId = prevNoteIdRef.current || ''
+    const isSameNote = prevId === incomingId
+    // Consider blank-id -> newly created id as the same logical note during rollover
+    const sameLogicalNote = isSameNote || (prevId === '' && createdIdRef.current === incomingId)
 
-        if (createdIdRef.current && incomingId === createdIdRef.current && (prevId === '' || prevId === createdIdRef.current)) {
+        // If a create is in-flight, parent may emit the new id; don't apply while pending
+        if (createdIdRef.current && pendingCreateRef.current && (prevId === '' || prevId === createdIdRef.current)) {
             prevNoteIdRef.current = incomingId
             if (editingNote && editingNote.folder_id) setSelectedFolder(editingNote.folder_id)
             return
         }
 
-        if (editingNote) {
+    if (editingNote) {
+            if (editingNote.id) {
+                stableNoteIdRef.current = editingNote.id
+            }
             const t = editingNote.title || ''
             const c = normalizeContent(editingNote.content || '')
-            setTitle(t)
-            setContent(c)
-            setInitialTitle(t)
-            setInitialContent(c)
-            setDirty(false)
-            onDirtyChange?.(editingNote.id || '', false)
+
+            // Detect local unsaved work (title or content)
+            const localNormalized = normalizeContent(content)
+            const initialNormalized = normalizeContent(initialContent)
+            const contentHasUnsavedTyping = localNormalized !== initialNormalized
+            const titleHasUnsavedTyping = (title || '') !== (initialTitle || '')
+            const localHasUnsavedTyping = contentHasUnsavedTyping || titleHasUnsavedTyping
+
+            // Only apply incoming data when switching notes or when there's no unsaved typing,
+            // and never while a save is in-flight.
+            if (!isSavingRef.current && (!sameLogicalNote || !localHasUnsavedTyping)) {
+                // If still on the same logical note, prefer our last saved content over an older server echo.
+                // If switching to a different note, always use the incoming content.
+                const toApply = sameLogicalNote && savedContentRef.current && savedContentRef.current !== c ? savedContentRef.current : c
+                setTitle(t)
+                setContent(toApply)
+                setInitialTitle(t)
+                setInitialContent(toApply)
+                if (sameLogicalNote) {
+                    if (!savedContentRef.current) savedContentRef.current = toApply
+                } else {
+                    // On real note switch, reset saved snapshot to this note's content
+                    savedContentRef.current = c
+                }
+                setDirty(false)
+                onDirtyChange?.(editingNote.id || '', false)
+            }
             if (editingNote.folder_id) {
                 setSelectedFolder(editingNote.folder_id)
                 prevSelectedFolderRef.current = editingNote.folder_id
@@ -84,10 +113,13 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             setInitialContent('')
             setDirty(false)
             onDirtyChange?.('', false)
+            savedContentRef.current = null
+            // Do not clear stableNoteIdRef here; keep last known id to avoid accidental create due to transient undefined
         }
         prevNoteIdRef.current = incomingId
     }, [editingNote])
 
+    // Load folders list
     useEffect(() => {
         async function loadFolders() {
             try {
@@ -105,9 +137,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                             const [nonceB64, cipherB64] = display.split('.')
                             const plain = await decryptNotePayload(key, cipherB64, nonceB64)
                             display = plain || 'Untitled'
-                        } catch {
-                            // leave as-is
-                        }
+                        } catch { }
                     }
                     map[f.id] = display
                 }
@@ -121,40 +151,69 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         loadFolders()
     }, [])
 
+    // Save handler
     async function handleSave(_opts?: { clearAfterSave?: boolean, folderId?: string | undefined }) {
+        // Wait on any pending create to avoid duplicate creates
+        if (pendingCreateRef.current) {
+            try { await pendingCreateRef.current } catch { }
+        }
         if (isSavingRef.current) return
         isSavingRef.current = true
         try {
+            // Yield one tick to ensure CodeMirror flushes any just-typed input
+            await new Promise<void>(resolve => setTimeout(resolve, 0))
             setLoading(true)
             const key = getNoteKey()
             if (!key) { setLoading(false); isSavingRef.current = false; return }
-            const payload = JSON.stringify({ title, content })
+            // Get the freshest content from CodeMirror to avoid losing last keystrokes
+            const latestContent = normalizeContent(cmViewRef.current ? cmViewRef.current.state.doc.toString() : content)
+            if (latestContent !== content) setContent(latestContent)
+            const payload = JSON.stringify({ title, content: latestContent })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
-            const currentWordCount = (content || '').trim().split(/\s+/).filter(Boolean).length
+            const currentWordCount = (latestContent || '').trim().split(/\s+/).filter(Boolean).length
             const folderToUse = (_opts && Object.prototype.hasOwnProperty.call(_opts, 'folderId')) ? _opts!.folderId : selectedFolder
-            const noteId = (editingNote && editingNote.id) ? editingNote.id : createdIdRef.current
+            // Prefer the stable id tracked from props or prior create completion
+            const noteId = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || null
+
+            // Optimistically remember what we're saving
+            savedContentRef.current = latestContent
+
             if (noteId) {
                 const payloadPatch: any = { content_encrypted: ciphertext, nonce, word_count: currentWordCount }
                 if (folderToUse) payloadPatch.folder_id = folderToUse
                 await updateNote(noteId, payloadPatch)
+                onSaved?.()
             } else {
-                const res = await createNote({ folder_id: folderToUse, content_encrypted: ciphertext, nonce, word_count: currentWordCount })
-                if (res && (res.id || res.note_id || res.note?.id)) {
-                    const id = res.id || res.note_id || (res.note && res.note.id)
-                    createdIdRef.current = id
-                    onSaved?.(id)
+                const tempId = (globalThis.crypto && 'randomUUID' in globalThis.crypto) ? (globalThis.crypto as any).randomUUID() : `temp-${Date.now()}`
+                createdIdRef.current = tempId
+                stableNoteIdRef.current = tempId
+                const p = createNote({ id: tempId, folder_id: folderToUse, content_encrypted: ciphertext, nonce, word_count: currentWordCount })
+                pendingCreateRef.current = p
+                try {
+                    const res = await p
+                    pendingCreateRef.current = null
+                    if (res && (res.id || res.note_id || res.note?.id)) {
+                        const id = res.id || res.note_id || (res.note && res.note.id)
+                        createdIdRef.current = id
+                        stableNoteIdRef.current = id
+                        onSaved?.(id)
+                    } else {
+                        if (createdIdRef.current === tempId) createdIdRef.current = null
+                        if (stableNoteIdRef.current === tempId) stableNoteIdRef.current = null
+                    }
+                } catch (e) {
+                    pendingCreateRef.current = null
+                    if (createdIdRef.current === tempId) createdIdRef.current = null
+                    if (stableNoteIdRef.current === tempId) stableNoteIdRef.current = null
+                    throw e
                 }
             }
-            if (!editingNote && !createdIdRef.current) { onSaved?.() }
-            else if (editingNote) { onSaved?.() }
             setInitialTitle(title)
-            setInitialContent(content)
+            setInitialContent(latestContent)
+            savedContentRef.current = latestContent
             setDirty(false)
             setLastSavedAt(Date.now())
-            try {
-                // Notify sidebar to refresh folder word totals if goals are present
-                window.dispatchEvent(new Event('note-saved'))
-            } catch { /* ignore */ }
+            try { window.dispatchEvent(new Event('note-saved')) } catch { }
             onDirtyChange?.((editingNote && editingNote.id) || createdIdRef.current || '', false)
         } finally {
             setLoading(false)
@@ -170,12 +229,11 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         onDeleted?.()
     }
 
-    // Keep refs in sync with state so the interval callback can read latest values
+    // Keep refs synced
     useEffect(() => { dirtyRef.current = dirty }, [dirty])
     useEffect(() => { loadingRef.current = loading }, [loading])
 
-    // Autosave every 30 seconds when dirty. Use a single interval created on mount
-    // and read operations from refs to avoid stale closures and frequent resets.
+    // Autosave every 30s when dirty
     useEffect(() => {
         const interval = window.setInterval(() => {
             if (!dirtyRef.current || loadingRef.current) return
@@ -197,7 +255,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return () => window.removeEventListener('keydown', onKey)
     }, [dirty, loading, title, content, selectedFolder, editingNote])
 
-    // Warn on navigation if there's an unsaved NEW note
+    // Warn on nav if there's an unsaved NEW note
     useEffect(() => {
         function beforeUnload(e: BeforeUnloadEvent) {
             if (!editingNote || editingNote.id) return
@@ -223,19 +281,18 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial'
     }
 
-    // Detect dark mode (Tailwind may toggle `class="dark"` on <html>); keep in state
+    // Detect dark mode and observe root class
     const [isDark, setIsDark] = React.useState<boolean>(() => {
         try {
             if (typeof document !== 'undefined') {
                 if (document.documentElement.classList.contains('dark')) return true
                 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return true
             }
-        } catch (e) { }
+        } catch { }
         return false
     })
 
     useEffect(() => {
-        // Observe changes to the root's class attribute so theme flips when the app toggles dark mode
         if (typeof document === 'undefined') return
         const root = document.documentElement
         const obs = new MutationObserver(() => {
@@ -245,13 +302,12 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return () => obs.disconnect()
     }, [])
 
-    // CodeMirror themes for light/dark so we don't have to fight vendor styles with global overrides
+    // Light/Dark CodeMirror themes
     const cmLightTheme = React.useMemo(() => EditorView.theme({
         '.cm-content': { caretColor: 'rgba(0,0,0,0.85)', fontFamily: 'inherit' },
         '.cm-scroller': { fontFamily: 'inherit' },
         '.cm-cursor': { display: 'block', borderLeft: 'none', width: '2px', backgroundColor: 'rgba(0,0,0,0.85)' },
         '.cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'rgba(59,130,246,0.25)' },
-        /* Make formatting chars (markdown markers, punctuation) slightly more visible */
         '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(75,85,99,0.75)' }
     }, { dark: false }), [])
 
@@ -260,7 +316,6 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         '.cm-scroller': { fontFamily: 'inherit' },
         '.cm-cursor': { display: 'block', borderLeft: 'none', width: '2px', backgroundColor: 'rgba(255,255,255,0.92)' },
         '.cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'rgba(14,35,50,0.6)' },
-        /* Make formatting chars (markdown markers, punctuation) a touch brighter in dark mode */
         '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(203,213,225,0.85)' }
     }, { dark: true }), [])
 
@@ -344,10 +399,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     readingTimeMin={readingTimeMin ?? null}
                     readingDifficulty={readingDifficulty}
                     fleschScore={fleschScore}
-                    loading={loading}
+                    loading={loading || !!pendingCreateRef.current || isSavingRef.current}
                     lastSavedAt={lastSavedAt}
                     dirty={dirty}
-                    onSave={() => handleSave()}
+                    onSave={() => { if (!isSavingRef.current && !pendingCreateRef.current) handleSave() }}
                 />
             </div>
         </div>
