@@ -99,8 +99,14 @@ export default {
                 }
             }
 
-            // Forward data routes to dataRouter (include settings)
-            if (url.pathname.startsWith('/api/folders') || url.pathname.startsWith('/api/notes') || url.pathname.startsWith('/api/data') || url.pathname.startsWith('/api/settings')) {
+            // Forward data routes to dataRouter (include settings and stats)
+            if (
+                url.pathname.startsWith('/api/folders') ||
+                url.pathname.startsWith('/api/notes') ||
+                url.pathname.startsWith('/api/data') ||
+                url.pathname.startsWith('/api/settings') ||
+                url.pathname.startsWith('/api/folder-stats')
+            ) {
                 try {
                     const fReq = await makeForwardedRequest(request)
                     if (typeof (dataRouter as any).fetch === 'function') {

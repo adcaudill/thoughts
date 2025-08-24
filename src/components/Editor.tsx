@@ -127,14 +127,15 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             if (!key) { setLoading(false); isSavingRef.current = false; return }
             const payload = JSON.stringify({ title, content })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
+            const currentWordCount = (content || '').trim().split(/\s+/).filter(Boolean).length
             const folderToUse = (_opts && Object.prototype.hasOwnProperty.call(_opts, 'folderId')) ? _opts!.folderId : selectedFolder
             const noteId = (editingNote && editingNote.id) ? editingNote.id : createdIdRef.current
             if (noteId) {
-                const payloadPatch: any = { content_encrypted: ciphertext, nonce }
+                const payloadPatch: any = { content_encrypted: ciphertext, nonce, word_count: currentWordCount }
                 if (folderToUse) payloadPatch.folder_id = folderToUse
                 await updateNote(noteId, payloadPatch)
             } else {
-                const res = await createNote({ folder_id: folderToUse, content_encrypted: ciphertext, nonce })
+                const res = await createNote({ folder_id: folderToUse, content_encrypted: ciphertext, nonce, word_count: currentWordCount })
                 if (res && (res.id || res.note_id || res.note?.id)) {
                     const id = res.id || res.note_id || (res.note && res.note.id)
                     createdIdRef.current = id
@@ -147,6 +148,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             setInitialContent(content)
             setDirty(false)
             setLastSavedAt(Date.now())
+            try {
+                // Notify sidebar to refresh folder word totals if goals are present
+                window.dispatchEvent(new Event('note-saved'))
+            } catch { /* ignore */ }
             onDirtyChange?.((editingNote && editingNote.id) || createdIdRef.current || '', false)
         } finally {
             setLoading(false)

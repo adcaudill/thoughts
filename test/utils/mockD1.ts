@@ -79,6 +79,11 @@ export function createMockD1() {
         const rows = select('folders', f => f.user_id === user_id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         return { results: rows.map(r => ({ id: r.id, parent_id: r.parent_id ?? null, name_encrypted: r.name_encrypted, is_default: r.is_default, order: r.order ?? 0, created_at: r.created_at })) }
       }
+      if (sql === 'SELECT id, parent_id, name_encrypted, is_default, "order", created_at, goal_word_count FROM folders WHERE user_id = ? ORDER BY "order" ASC') {
+        const [user_id] = args
+        const rows = select('folders', f => f.user_id === user_id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        return { results: rows.map(r => ({ id: r.id, parent_id: r.parent_id ?? null, name_encrypted: r.name_encrypted, is_default: r.is_default, order: r.order ?? 0, created_at: r.created_at, goal_word_count: r.goal_word_count ?? null })) }
+      }
       if (sql.startsWith('UPDATE folders SET ')) {
         // supports dynamic set list built by server; last arg is id
         const setClause = sql.slice('UPDATE folders SET '.length, sql.indexOf(' WHERE id = ?'))
@@ -100,9 +105,14 @@ export function createMockD1() {
       }
 
       // NOTES
-      if (sql.startsWith('INSERT INTO notes')) {
+      if (sql.startsWith('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at)')) {
         const [id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at] = args
-        tables.notes.push({ id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at })
+        tables.notes.push({ id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count: 0 })
+        return { success: true }
+      }
+      if (sql.startsWith('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count)')) {
+        const [id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count] = args
+        tables.notes.push({ id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count: word_count ?? 0 })
         return { success: true }
       }
       if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE user_id = ? AND folder_id = ?') {
@@ -110,15 +120,30 @@ export function createMockD1() {
         const rows = select('notes', n => n.user_id === user_id && n.folder_id === folder_id)
         return { results: rows.map(n => ({ id: n.id, folder_id: n.folder_id, title_encrypted: n.title_encrypted, content_encrypted: n.content_encrypted, nonce: n.nonce, created_at: n.created_at, updated_at: n.updated_at })) }
       }
+      if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ? AND folder_id = ?') {
+        const [user_id, folder_id] = args
+        const rows = select('notes', n => n.user_id === user_id && n.folder_id === folder_id)
+        return { results: rows.map(n => ({ id: n.id, folder_id: n.folder_id, title_encrypted: n.title_encrypted, content_encrypted: n.content_encrypted, nonce: n.nonce, created_at: n.created_at, updated_at: n.updated_at, word_count: n.word_count ?? 0 })) }
+      }
       if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE user_id = ?') {
         const [user_id] = args
         const rows = select('notes', n => n.user_id === user_id)
         return { results: rows.map(n => ({ id: n.id, folder_id: n.folder_id, title_encrypted: n.title_encrypted, content_encrypted: n.content_encrypted, nonce: n.nonce, created_at: n.created_at, updated_at: n.updated_at })) }
       }
+      if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ?') {
+        const [user_id] = args
+        const rows = select('notes', n => n.user_id === user_id)
+        return { results: rows.map(n => ({ id: n.id, folder_id: n.folder_id, title_encrypted: n.title_encrypted, content_encrypted: n.content_encrypted, nonce: n.nonce, created_at: n.created_at, updated_at: n.updated_at, word_count: n.word_count ?? 0 })) }
+      }
       if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE id = ? AND user_id = ?') {
         const [id, user_id] = args
         const row = select('notes', n => n.id === id && n.user_id === user_id)[0]
         return row ? { id: row.id, folder_id: row.folder_id, title_encrypted: row.title_encrypted, content_encrypted: row.content_encrypted, nonce: row.nonce, created_at: row.created_at, updated_at: row.updated_at } : undefined
+      }
+      if (sql === 'SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE id = ? AND user_id = ?') {
+        const [id, user_id] = args
+        const row = select('notes', n => n.id === id && n.user_id === user_id)[0]
+        return row ? { id: row.id, folder_id: row.folder_id, title_encrypted: row.title_encrypted, content_encrypted: row.content_encrypted, nonce: row.nonce, created_at: row.created_at, updated_at: row.updated_at, word_count: row.word_count ?? 0 } : undefined
       }
       if (sql === 'SELECT * FROM notes WHERE id = ?') {
         const [id] = args
@@ -147,6 +172,18 @@ export function createMockD1() {
         const [id] = args
         remove('notes', n => n.id === id)
         return { success: true }
+      }
+
+      // Aggregations
+      if (sql === 'SELECT folder_id as id, SUM(word_count) as total_words FROM notes WHERE user_id = ? GROUP BY folder_id') {
+        const [user_id] = args
+        const rows = select('notes', n => n.user_id === user_id)
+        const map: Record<string, number> = {}
+        for (const n of rows) {
+          const fid = n.folder_id
+          map[fid] = (map[fid] || 0) + (n.word_count ?? 0)
+        }
+        return { results: Object.keys(map).map(id => ({ id, total_words: map[id] })) }
       }
 
       // AUTH CHALLENGES

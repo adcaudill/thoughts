@@ -59,7 +59,7 @@ router.get('/api/folders', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
 
-    const res = await db.prepare('SELECT id, parent_id, name_encrypted, is_default, "order", created_at FROM folders WHERE user_id = ? ORDER BY "order" ASC').bind(userId).all()
+    const res = await db.prepare('SELECT id, parent_id, name_encrypted, is_default, "order", created_at, goal_word_count FROM folders WHERE user_id = ? ORDER BY "order" ASC').bind(userId).all()
     return new Response(JSON.stringify({ ok: true, folders: res.results || [] }), { status: 200 })
 })
 
@@ -73,8 +73,8 @@ router.post('/api/folders', async request => {
     if (!body || !body.name_encrypted) return new Response(JSON.stringify({ ok: false, error: 'missing fields' }), { status: 400 })
 
     const id = uuidv4()
-    await db.prepare('INSERT INTO folders (id, user_id, parent_id, name_encrypted, is_default, "order") VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(id, userId, body.parent_id || null, body.name_encrypted, body.is_default ? 1 : 0, body.order || 0)
+    await db.prepare('INSERT INTO folders (id, user_id, parent_id, name_encrypted, is_default, "order", goal_word_count) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, userId, body.parent_id || null, body.name_encrypted, body.is_default ? 1 : 0, body.order || 0, body.goal_word_count ?? null)
         .run()
 
     return new Response(JSON.stringify({ ok: true, id }), { status: 201 })
@@ -98,6 +98,7 @@ router.patch('/api/folders/:id', async request => {
     if (body.name_encrypted !== undefined) { updates.push('name_encrypted = ?'); values.push(body.name_encrypted) }
     if (body.parent_id !== undefined) { updates.push('parent_id = ?'); values.push(body.parent_id) }
     if (body.order !== undefined) { updates.push('"order" = ?'); values.push(body.order) }
+    if (body.goal_word_count !== undefined) { updates.push('goal_word_count = ?'); values.push(body.goal_word_count) }
 
     if (updates.length === 0) return new Response(JSON.stringify({ ok: false, error: 'nothing to update' }), { status: 400 })
 
@@ -138,9 +139,9 @@ router.get('/api/notes', async request => {
     const folderId = url.searchParams.get('folderId')
     let res
     if (folderId) {
-        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE user_id = ? AND folder_id = ?').bind(userId, folderId).all()
+        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ? AND folder_id = ?').bind(userId, folderId).all()
     } else {
-        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE user_id = ?').bind(userId).all()
+        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ?').bind(userId).all()
     }
     return new Response(JSON.stringify({ ok: true, notes: res.results || [] }), { status: 200 })
 })
@@ -151,7 +152,7 @@ router.get('/api/notes/:id', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
     const { id } = request.params as any
-    const note = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
+    const note = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
     if (!note) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
     return new Response(JSON.stringify({ ok: true, note }), { status: 200 })
 })
@@ -182,8 +183,8 @@ router.post('/api/notes', async request => {
     const id = uuidv4()
     const now = new Date().toISOString()
     try {
-        await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-            .bind(id, userId, folderId, body.title_encrypted || null, body.content_encrypted, body.nonce || null, now, now)
+        await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(id, userId, folderId, body.title_encrypted || null, body.content_encrypted, body.nonce || null, now, now, body.word_count ?? 0)
             .run()
     } catch {
         // Return a controlled error instead of letting the exception bubble as a 500
@@ -209,6 +210,7 @@ router.patch('/api/notes/:id', async request => {
     if (body.content_encrypted !== undefined) { updates.push('content_encrypted = ?'); values.push(body.content_encrypted) }
     if (body.nonce !== undefined) { updates.push('nonce = ?'); values.push(body.nonce) }
     if (body.folder_id !== undefined) { updates.push('folder_id = ?'); values.push(body.folder_id) }
+    if (body.word_count !== undefined) { updates.push('word_count = ?'); values.push(body.word_count) }
 
     if (updates.length === 0) return new Response(JSON.stringify({ ok: false, error: 'nothing to update' }), { status: 400 })
     values.push(new Date().toISOString())
@@ -302,3 +304,16 @@ router.patch('/api/settings', async request => {
 })
 
 export default router
+
+// Additional route: summarize total word counts per folder for the user
+router.get('/api/folder-stats', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const res = await db.prepare(
+        'SELECT folder_id as id, SUM(word_count) as total_words FROM notes WHERE user_id = ? GROUP BY folder_id'
+    ).bind(userId).all()
+    const results = (res.results || []).map((r: any) => ({ id: r.id, total_words: Number(r.total_words || 0) }))
+    return new Response(JSON.stringify({ ok: true, stats: results }), { status: 200 })
+})

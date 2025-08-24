@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { decryptNotePayload, encryptNotePayload } from '../lib/crypto'
-import { createFolder, updateFolder, deleteFolder, getFolders } from '../lib/api'
+import { createFolder, updateFolder, deleteFolder, getFolders, getFolderStats } from '../lib/api'
 
 type Folder = {
     id: string
     parent_id: string | null
     name_encrypted: string
     is_default: number
+    goal_word_count?: number | null
 }
 
 function buildTree(folders: Folder[]) {
@@ -38,6 +39,18 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
             } else {
                 const f = j.folders || []
                 setFolders(f)
+                // Only fetch stats if any folder has a goal set (coerce possible string values)
+                const hasGoals = f.some((x: any) => Number(x.goal_word_count) > 0)
+                if (hasGoals) {
+                    const statsRes = await getFolderStats().catch(() => ({ ok: false, stats: [] }))
+                    const statMap: Record<string, number> = {}
+                    if (statsRes && statsRes.ok && Array.isArray(statsRes.stats)) {
+                        for (const s of statsRes.stats) statMap[s.id] = Number(s.total_words || 0)
+                    }
+                    setFolderWordTotals(statMap)
+                } else {
+                    setFolderWordTotals({})
+                }
                 // populate display names (decrypt if possible)
                 const map: Record<string, string> = {}
                 await Promise.all(f.map(async (folder: any) => {
@@ -69,6 +82,26 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
 
     useEffect(() => { loadFolders() }, [])
 
+    // Refresh stats after a note is saved so progress rings update live
+    useEffect(() => {
+        function onNoteSaved() {
+            if (!folders || folders.length === 0) return
+            const hasGoals = folders.some((x: any) => Number(x.goal_word_count) > 0)
+            if (!hasGoals) return
+            getFolderStats()
+                .then((statsRes: any) => {
+                    const statMap: Record<string, number> = {}
+                    if (statsRes && statsRes.ok && Array.isArray(statsRes.stats)) {
+                        for (const s of statsRes.stats) statMap[s.id] = Number(s.total_words || 0)
+                    }
+                    setFolderWordTotals(statMap)
+                })
+                .catch(() => { /* ignore */ })
+        }
+        window.addEventListener('note-saved', onNoteSaved)
+        return () => window.removeEventListener('note-saved', onNoteSaved)
+    }, [folders])
+
     const tree = folders ? buildTree(folders) : []
 
     // note: per current usage, folder display names are computed via `nameDisplayMap`.
@@ -77,10 +110,13 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     const [editingMap, setEditingMap] = useState<Record<string, boolean>>({})
     const [nameMap, setNameMap] = useState<Record<string, string>>({})
     const [nameDisplayMap, setNameDisplayMap] = useState<Record<string, string>>({})
+    const [goalMap, setGoalMap] = useState<Record<string, string>>({})
+    const [folderWordTotals, setFolderWordTotals] = useState<Record<string, number>>({})
 
-    function startEditing(id: string, current: string) {
+    function startEditing(id: string, current: string, currentGoal?: number | null) {
         setEditingMap(m => ({ ...m, [id]: true }))
         setNameMap(m => ({ ...m, [id]: current }))
+        setGoalMap(m => ({ ...m, [id]: currentGoal != null ? String(currentGoal) : '' }))
     }
 
     function stopEditing(id: string) {
@@ -89,6 +125,27 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
 
     function setNameFor(id: string, val: string) {
         setNameMap(m => ({ ...m, [id]: val }))
+    }
+
+    function setGoalFor(id: string, val: string) {
+        // Only accept digits, empty string allowed for clearing
+        const clean = val.replace(/[^0-9]/g, '')
+        setGoalMap(m => ({ ...m, [id]: clean }))
+    }
+
+    function ProgressRing({ value, goal }: { value: number; goal?: number | null }) {
+        const size = 18
+        const stroke = 2
+        const r = (size - stroke) / 2
+        const c = 2 * Math.PI * r
+        const pct = goal && goal > 0 ? Math.max(0, Math.min(1, value / goal)) : 0
+        const offset = c * (1 - pct)
+        return (
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+                <circle cx={size / 2} cy={size / 2} r={r} stroke="#e5e7eb" strokeWidth={stroke} fill="none" />
+                <circle cx={size / 2} cy={size / 2} r={r} stroke="#3b82f6" strokeWidth={stroke} fill="none" strokeDasharray={c} strokeDashoffset={offset} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+            </svg>
+        )
     }
 
     async function createNewFolder() {
@@ -112,45 +169,87 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
         const editing = !!editingMap[node.id]
         const name = nameMap[node.id] ?? node.name_encrypted ?? ''
         const displayName = nameDisplayMap[node.id] ?? (node.is_default === 1 ? 'Inbox' : (node.name_encrypted || 'Untitled'))
+        const totalWords = folderWordTotals[node.id] || 0
+        const goal = node.goal_word_count ?? null
         return (
             <li key={node.id} className="py-1 px-2 rounded hover:bg-slate-50" style={{ paddingLeft: `${depth * 12}px` }}>
                 <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 truncate">
-                        <i className="fa-regular fa-folder text-slate-400 w-4" aria-hidden="true" />
-                        {node.is_default === 1 ? (
-                            <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label="inbox">Inbox</button>
-                        ) : editing ? (
-                            <input
-                                className="border dark:border-slate-800/30 p-1 text-sm w-full"
-                                value={name}
-                                onChange={e => setNameFor(node.id, e.target.value)}
-                                onKeyDown={async (e) => {
-                                    if (e.key === 'Enter') {
-                                        // save
-                                        let payloadName = name
-                                        if (noteKey) {
-                                            try {
-                                                const enc = await encryptNotePayload(noteKey, name)
-                                                payloadName = `${enc.nonce}.${enc.ciphertext}`
-                                            } catch { payloadName = name }
+                    {editing ? (
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <i className="fa-regular fa-folder text-slate-400 w-4" aria-hidden="true" />
+                                <input
+                                    className="border dark:border-slate-800/30 p-1 text-sm w-full"
+                                    value={name}
+                                    onChange={e => setNameFor(node.id, e.target.value)}
+                                    onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                            // save
+                                            let payloadName = name
+                                            if (noteKey) {
+                                                try {
+                                                    const enc = await encryptNotePayload(noteKey, name)
+                                                    payloadName = `${enc.nonce}.${enc.ciphertext}`
+                                                } catch { payloadName = name }
+                                            }
+                                            const goalStr = goalMap[node.id]
+                                            const goalNum = goalStr === '' ? null : Number(goalStr)
+                                            await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
+                                            stopEditing(node.id)
+                                            await loadFolders()
+                                        } else if (e.key === 'Escape') {
+                                            stopEditing(node.id)
                                         }
-                                        await updateFolder(node.id, { name_encrypted: payloadName })
-                                        stopEditing(node.id)
-                                        await loadFolders()
-                                    } else if (e.key === 'Escape') {
-                                        stopEditing(node.id)
-                                    }
-                                }}
-                                autoFocus
-                                aria-label={`edit-folder-${node.id}`}
-                            />
-                        ) : (
-                            <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label={`folder-${node.id}`}>{displayName}</button>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {!editing && <button aria-label={`rename-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => startEditing(node.id, node.name_encrypted || '')}><i className="fa-solid fa-pen-to-square" aria-hidden="true" /> <span className="sr-only">rename</span></button>}
-                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } await updateFolder(node.id, { name_encrypted: payloadName }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
+                                    }}
+                                    autoFocus
+                                    aria-label={`edit-folder-${node.id}`}
+                                />
+                            </div>
+                            <div className="mt-2 pl-6">
+                                <input
+                                    className="border dark:border-slate-800/30 p-1 text-xs w-36"
+                                    placeholder="Goal words"
+                                    value={goalMap[node.id] ?? ''}
+                                    onChange={e => setGoalFor(node.id, e.target.value)}
+                                    onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                            let payloadName = name
+                                            if (noteKey) {
+                                                try {
+                                                    const enc = await encryptNotePayload(noteKey, name)
+                                                    payloadName = `${enc.nonce}.${enc.ciphertext}`
+                                                } catch { payloadName = name }
+                                            }
+                                            const goalStr = goalMap[node.id]
+                                            const goalNum = goalStr === '' ? null : Number(goalStr)
+                                            await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
+                                            stopEditing(node.id)
+                                            await loadFolders()
+                                        }
+                                    }}
+                                    aria-label={`edit-folder-goal-${node.id}`}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 truncate">
+                            <i className="fa-regular fa-folder text-slate-400 w-4" aria-hidden="true" />
+                            {node.is_default === 1 ? (
+                                <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label="inbox">Inbox</button>
+                            ) : (
+                                <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label={`folder-${node.id}`}>{displayName}</button>
+                            )}
+                            {goal && goal > 0 ? (
+                                <div className="ml-1 flex items-center gap-1 text-xs text-slate-500">
+                                    <ProgressRing value={totalWords} goal={goal} />
+                                    <span>{Math.min(totalWords, goal)}/{goal}</span>
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
+                    <div className="flex items-center gap-2 self-start">
+                        {!editing && <button aria-label={`rename-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => startEditing(node.id, node.name_encrypted || '', node.goal_word_count ?? null)}><i className="fa-solid fa-pen-to-square" aria-hidden="true" /> <span className="sr-only">rename</span></button>}
+                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } const goalStr = goalMap[node.id]; const goalNum = goalStr === '' ? null : Number(goalStr); await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
                         {editing && <button aria-label={`cancel-${node.id}`} className="text-xs text-slate-500" onClick={() => stopEditing(node.id)}><i className="fa-solid fa-xmark" aria-hidden="true" /></button>}
                         {node.is_default !== 1 && <button aria-label={`delete-${node.id}`} className="text-xs text-red-600 flex items-center gap-1" onClick={async () => { if (!confirm('Delete folder? This will move notes to Inbox.')) return; await deleteFolder(node.id); await loadFolders() }}><i className="fa-solid fa-trash" aria-hidden="true" /></button>}
                     </div>

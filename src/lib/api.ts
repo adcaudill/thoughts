@@ -23,12 +23,12 @@ export async function getFolders(_token?: string) {
     return res.json()
 }
 
-export async function createFolder(payload: { parent_id?: string; name_encrypted: string; is_default?: boolean; order?: number }) {
+export async function createFolder(payload: { parent_id?: string; name_encrypted: string; is_default?: boolean; order?: number; goal_word_count?: number | null }) {
     const res = await fetch('/api/folders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
     return res.json()
 }
 
-export async function updateFolder(id: string, payload: { name_encrypted?: string; parent_id?: string | null; order?: number }) {
+export async function updateFolder(id: string, payload: { name_encrypted?: string; parent_id?: string | null; order?: number; goal_word_count?: number | null }) {
     const res = await fetch(`/api/folders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
     return res.json()
 }
@@ -44,12 +44,12 @@ export async function getNotes(folderId?: string) {
     return res.json()
 }
 
-export async function createNote(payload: { folder_id?: string; title_encrypted?: string; content_encrypted: string; nonce?: string }) {
+export async function createNote(payload: { folder_id?: string; title_encrypted?: string; content_encrypted: string; nonce?: string; word_count?: number }) {
     const res = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
     return res.json()
 }
 
-export async function updateNote(id: string, payload: { title_encrypted?: string; content_encrypted?: string; nonce?: string; folder_id?: string }) {
+export async function updateNote(id: string, payload: { title_encrypted?: string; content_encrypted?: string; nonce?: string; folder_id?: string; word_count?: number }) {
     const res = await fetch(`/api/notes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
     return res.json()
 }
@@ -66,5 +66,10 @@ export async function getSettings() {
 
 export async function updateSettings(payload: any) {
     const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function getFolderStats() {
+    const res = await fetch('/api/folder-stats', { credentials: 'same-origin' })
     return res.json()
 }
