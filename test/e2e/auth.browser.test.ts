@@ -1,6 +1,8 @@
 import { test, expect } from 'vitest'
 import { chromium } from 'playwright'
 import { spawn } from 'child_process'
+import fs from 'fs'
+import path from 'path'
 
 // This test requires wrangler to be available in PATH (project has wrangler dependency).
 // It starts `wrangler dev --local` in background and tears it down after the test.
@@ -37,12 +39,23 @@ test('browser-based register -> challenge -> verify flow', { timeout: 60000 }, a
     const base = process.env.E2E_BASE_URL || 'http://localhost:8787'
     // If E2E_BASE_URL is not provided, tests will start a local wrangler process.
     let proc: any = null
+    const lockFile = path.join(process.cwd(), '.wrangler-e2e.lock')
+    const tryAcquireLock = () => {
+        try { fs.openSync(lockFile, 'wx'); return true } catch { return false }
+    }
+    const releaseLock = () => { try { fs.unlinkSync(lockFile) } catch { /* ignore */ } }
     if (!process.env.E2E_BASE_URL) {
-        // If a wrangler instance is already answering, reuse it; otherwise, start one.
+        // If a wrangler instance is already answering, reuse it; otherwise, coordinate start with a file lock.
         if (!(await isUpOnce(base))) {
-            proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
-            proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
-            proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+            const haveLock = tryAcquireLock()
+            if (haveLock) {
+                proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
+                proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
+                proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+            }
+            // Wait for server either way, then release lock for other tests
+            await waitForPing(base, 20000).catch(() => null)
+            releaseLock()
         }
     }
 
@@ -97,8 +110,9 @@ test('browser-based register -> challenge -> verify flow', { timeout: 60000 }, a
         expect(res.status).toBe(200)
 
         await browser.close()
-        if (viteProc) viteProc.kill()
+        // Do not kill vite/wrangler; other parallel tests may still use them.
+        // They will exit with the test process.
     } finally {
-        if (proc) proc.kill()
+        // Intentionally left empty
     }
 })

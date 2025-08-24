@@ -1,0 +1,77 @@
+/* Centered, full-height editor with ~90ch text measure and focus/issue decorations */
+
+.editor-cm-wrapper,
+.cm-editor {
+    height: 100%;
+}
+
+/* Limit content measure to about 90 characters, keep centered */
+.cm-editor.cm-focus-mode .cm-content,
+.editor-cm-wrapper .cm-content {
+    max-width: 90ch;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Remove gutters and extra padding for a clean sheet look */
+.cm-editor .cm-gutters {
+    display: none;
+}
+
+.cm-editor .cm-scroller {
+    overflow: auto;
+    padding: 1.25rem 1rem;
+}
+
+.cm-editor .cm-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Paragraph focus: dim non-active paragraphs subtly */
+.cm-focus-current .cm-line {
+    opacity: 0.45;
+    transition: opacity 120ms ease;
+}
+
+.cm-focus-current .cm-active-paragraph {
+    opacity: 1;
+}
+
+/* Style issues: subtle red strike overlay using background gradient */
+.cm-style-issue {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 85%;
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    color: inherit;
+}
+
+.cm-style-issue {
+    color: rgb(220 38 38);
+}
+
+:root.dark .cm-style-issue {
+    color: rgb(248 113 113);
+}
+
+/* Focus editor container polish */
+.focus-editor {
+    backdrop-filter: blur(8px);
+}
+
+/* Ensure caret is visible in dark and light themes. CodeMirror uses .cm-cursor for the caret. */
+/* Caret & selection visuals are provided by CodeMirror's theme extensions
+   (see `Editor.tsx`). Keep minimal, non-!important fallbacks for browsers
+   that don't respect the CM theme layering. */
+.cm-editor ::selection,
+.cm-editor .cm-line ::selection,
+.cm-editor .cm-content ::selection {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+:root.dark .cm-editor ::selection,
+:root.dark .cm-editor .cm-line ::selection,
+:root.dark .cm-editor .cm-content ::selection {
+    background: rgba(14, 35, 50, 0.6);
+}

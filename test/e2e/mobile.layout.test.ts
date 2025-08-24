@@ -1,6 +1,8 @@
 import { test, expect } from 'vitest'
 import { chromium } from 'playwright'
 import { spawn } from 'child_process'
+import fs from 'fs'
+import path from 'path'
 
 function waitForPing(base: string, ms = 10000) {
     const start = Date.now()
@@ -29,14 +31,21 @@ const isUpOnce = async (url: string) => {
     }
 }
 
-test('mobile layout: sidebar collapses and editor shows compact toolbar on small viewports', { timeout: 90000 }, async () => {
+test('mobile layout: sidebar collapses and editor shows compact editor on small viewports', { timeout: 90000 }, async () => {
     const base = process.env.E2E_BASE_URL || 'http://localhost:8787'
     let proc: any = null
+    const lockFile = path.join(process.cwd(), '.wrangler-e2e.lock')
+    const tryAcquireLock = () => { try { fs.openSync(lockFile, 'wx'); return true } catch { return false } }
+    const releaseLock = () => { try { fs.unlinkSync(lockFile) } catch { /* ignore */ } }
     if (!process.env.E2E_BASE_URL) {
         if (!(await isUpOnce(base))) {
-            proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
-            proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
-            proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+            if (tryAcquireLock()) {
+                proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', '8787'], { stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd() })
+                proc.stdout.on('data', d => console.log('[wrangler]', d.toString()))
+                proc.stderr.on('data', d => console.error('[wrangler]', d.toString()))
+            }
+            await waitForPing(base, 20000).catch(() => null)
+            releaseLock()
         }
     }
 
@@ -96,15 +105,15 @@ test('mobile layout: sidebar collapses and editor shows compact toolbar on small
         // collapsed state uses 'w-12' class; ensure it's present
         expect(cls || '').toContain('w-12')
 
-        // Editor should be present with a toolbar suitable for mobile
-        await page.waitForSelector('.ql-toolbar', { timeout: 20000 })
-        const btns = await page.$$('.ql-toolbar button')
-        // compact toolbar should be relatively small; assert it's not huge
-        expect(btns.length).toBeLessThanOrEqual(12)
+        // Editor should be present (CodeMirror) and fit mobile nicely
+        await page.waitForSelector('.cm-editor', { timeout: 20000 })
+        const contentMeasure = await page.$eval('.cm-editor .cm-content', el => getComputedStyle(el as any).maxWidth)
+        // Ensure a reasonable max-width is applied (close to our 90ch rule; jsdom returns pixels, so just assert it's not 'none')
+        expect(String(contentMeasure || '')).not.toBe('none')
 
         await browser.close()
-        if (viteProc) viteProc.kill()
+        // Do not kill vite/wrangler explicitly; allow reuse by other tests.
     } finally {
-        if (proc) proc.kill()
+        // Intentionally no-op
     }
 })

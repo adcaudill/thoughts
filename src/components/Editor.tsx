@@ -1,6 +1,9 @@
 import React, { useEffect, useImperativeHandle, useState } from 'react'
-import ReactQuill from 'react-quill-new'
-import '../styles/quill.css'
+import CodeMirror from '@uiw/react-codemirror'
+import { markdown } from '@codemirror/lang-markdown'
+import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view'
+import { RangeSetBuilder } from '@codemirror/state'
+import '../styles/editor.css'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, getFolders } from '../lib/api'
@@ -23,48 +26,27 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const [menuOpen, setMenuOpen] = useState(false)
     const [folders, setFolders] = useState<Array<any>>([])
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined)
-    const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null)
 
     const titleRef = React.useRef<HTMLInputElement | null>(null)
     const wrapperRef = React.useRef<HTMLDivElement | null>(null)
-    const quillRef = React.useRef<any>(null)
-    const [isCompactToolbar, setIsCompactToolbar] = useState(false)
-    const styleOverlayRef = React.useRef<HTMLDivElement | null>(null)
-    const styleRafRef = React.useRef<number | null>(null)
+    const cmViewRef = React.useRef<EditorView | null>(null)
+
     // Track save-in-progress to avoid concurrent createNote races
     const isSavingRef = React.useRef(false)
     // If we create a note, remember its id so subsequent saves patch instead of creating
     const createdIdRef = React.useRef<string | null>(null)
+    const prevNoteIdRef = React.useRef<string | null>(null)
 
-    // Normalize Quill/HTML content so that editor default placeholder HTML (e.g. "<p><br></p>")
-    // is treated as an empty string. This prevents autosave from creating junk notes when
-    // the user hasn't actually entered any text.
-    function normalizeEditorHtml(html: string | null | undefined) {
-        if (!html) return ''
-        const raw = String(html).trim()
-        // Quick checks for common empty Quill output
-        if (!raw) return ''
-        // If the DOM text content is empty then treat as empty
-        try {
-            const div = document.createElement('div')
-            div.innerHTML = raw
-            if ((div.textContent || '').trim() === '') return ''
-        } catch {
-            // fall back to simple regex checks
-            const emptyRe = /^(<p>(?:<br\s*\/?>)?<\/p>|<div>(?:<br\s*\/?>)?<\/div>)$/i
-            if (emptyRe.test(raw)) return ''
-        }
-        // remove zero-width spaces and normalize whitespace
-        return raw.replace(/\u200B/g, '').trim()
+    // Normalize Markdown content
+    function normalizeContent(md: string | null | undefined) {
+        if (md == null) return ''
+        return String(md).replace(/\u200B/g, '').trim()
     }
 
-    const prevNoteIdRef = React.useRef<string | null>(null)
     useEffect(() => {
         const incomingId: string = editingNote ? (editingNote.id || '') : ''
         const prevId = prevNoteIdRef.current || ''
 
-        // If we just created a note and parent updated the id to the created one,
-        // do NOT reset local title/content. Keep the current editor state.
         if (createdIdRef.current && incomingId === createdIdRef.current && (prevId === '' || prevId === createdIdRef.current)) {
             prevNoteIdRef.current = incomingId
             if (editingNote && editingNote.folder_id) setSelectedFolder(editingNote.folder_id)
@@ -73,37 +55,25 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
         if (editingNote) {
             const t = editingNote.title || ''
-            const c = normalizeEditorHtml(editingNote.content || '')
+            const c = normalizeContent(editingNote.content || '')
             setTitle(t)
             setContent(c)
             setInitialTitle(t)
             setInitialContent(c)
             setDirty(false)
-            if (onDirtyChange) onDirtyChange(editingNote.id || '', false)
+            onDirtyChange?.(editingNote.id || '', false)
             if (editingNote.folder_id) setSelectedFolder(editingNote.folder_id)
-            // if creating a new note (empty id), focus title
-            if (!editingNote.id && titleRef.current) {
-                titleRef.current.focus()
-            }
+            if (!editingNote.id && titleRef.current) titleRef.current.focus()
         } else {
             setTitle('')
             setContent('')
             setInitialTitle('')
             setInitialContent('')
             setDirty(false)
-            if (onDirtyChange) onDirtyChange('', false)
+            onDirtyChange?.('', false)
         }
         prevNoteIdRef.current = incomingId
     }, [editingNote])
-
-    useEffect(() => {
-        function onResize() {
-            try { setIsCompactToolbar(window.innerWidth < 640) } catch { }
-        }
-        onResize()
-        window.addEventListener('resize', onResize)
-        return () => window.removeEventListener('resize', onResize)
-    }, [])
 
     useEffect(() => {
         async function loadFolders() {
@@ -129,33 +99,24 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     map[f.id] = display
                 }
                 setFolders(items.map((f: any) => ({ ...f, displayName: map[f.id] })))
-                // set default selection (Inbox)
                 if (!selectedFolder) {
                     const inbox = items.find((x: any) => x.is_default === 1)
                     if (inbox) setSelectedFolder(inbox.id)
                 }
-            } catch {
-                // ignore
-            }
+            } catch { }
         }
         loadFolders()
     }, [])
 
     async function handleSave(_opts?: { clearAfterSave?: boolean }) {
-        // prevent concurrent saves from racing to create a note twice
         if (isSavingRef.current) return
         isSavingRef.current = true
         try {
             setLoading(true)
             const key = getNoteKey()
-            if (!key) {
-                setLoading(false)
-                isSavingRef.current = false
-                return
-            }
+            if (!key) { setLoading(false); isSavingRef.current = false; return }
             const payload = JSON.stringify({ title, content })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
-            // prefer an existing id from the prop, else any id we created previously
             const noteId = (editingNote && editingNote.id) ? editingNote.id : createdIdRef.current
             if (noteId) {
                 const payloadPatch: any = { content_encrypted: ciphertext, nonce }
@@ -163,47 +124,44 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                 await updateNote(noteId, payloadPatch)
             } else {
                 const res = await createNote({ folder_id: selectedFolder, content_encrypted: ciphertext, nonce })
-                // createNote should return the created id; remember it so autosave/manual save don't create duplicates
                 if (res && (res.id || res.note_id || res.note?.id)) {
                     const id = res.id || res.note_id || (res.note && res.note.id)
                     createdIdRef.current = id
-                    // notify parent with created id if they want it
-                    if (onSaved) onSaved(id)
+                    onSaved?.(id)
                 }
             }
-            // notify caller that save completed
-            if (!editingNote && !createdIdRef.current) {
-                // if we created a note but didn't pass id above for some reason, still call onSaved
-                if (onSaved) onSaved()
-            } else if (editingNote) {
-                // for updates, call onSaved without args (parent handles refresh)
-                if (onSaved) onSaved()
-            }
-            // mark as saved (don't clear editor)
+            if (!editingNote && !createdIdRef.current) { onSaved?.() }
+            else if (editingNote) { onSaved?.() }
             setInitialTitle(title)
             setInitialContent(content)
             setDirty(false)
             setLastSavedAt(Date.now())
-            if (onDirtyChange) onDirtyChange((editingNote && editingNote.id) || createdIdRef.current || '', false)
+            onDirtyChange?.((editingNote && editingNote.id) || createdIdRef.current || '', false)
         } finally {
             setLoading(false)
             isSavingRef.current = false
         }
     }
 
+    async function handleDelete() {
+        if (!editingNote || !editingNote.id) return
+        setLoading(true)
+        await fetch(`/api/notes/${editingNote.id}`, { method: 'DELETE', credentials: 'same-origin' })
+        setLoading(false)
+        onDeleted?.()
+    }
+
     // Autosave every 30 seconds when dirty
     useEffect(() => {
         if (!dirty) return
-        const interval = setInterval(() => {
+        const interval = window.setInterval(() => {
             if (!dirty || loading) return
-            handleSave().catch(() => {
-                // ignore autosave errors for now
-            })
+            handleSave().catch(() => { })
         }, 30_000)
-        return () => clearInterval(interval)
+        return () => window.clearInterval(interval)
     }, [dirty, loading, title, content, selectedFolder, editingNote])
 
-    // Keyboard shortcut: Cmd/Ctrl+S to save when dirty
+    // Keyboard shortcut: Cmd/Ctrl+S
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
             const isSave = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'
@@ -216,7 +174,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         return () => window.removeEventListener('keydown', onKey)
     }, [dirty, loading, title, content, selectedFolder, editingNote])
 
-    // Warn on navigation if there's an unsaved NEW note (no id yet) and changes exist
+    // Warn on navigation if there's an unsaved NEW note
     useEffect(() => {
         function beforeUnload(e: BeforeUnloadEvent) {
             if (!editingNote || editingNote.id) return
@@ -225,12 +183,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             e.returnValue = ''
         }
         if (!editingNote || editingNote.id) return
-        if (dirty) {
-            window.addEventListener('beforeunload', beforeUnload)
-        }
-        return () => {
-            window.removeEventListener('beforeunload', beforeUnload)
-        }
+        if (dirty) window.addEventListener('beforeunload', beforeUnload)
+        return () => window.removeEventListener('beforeunload', beforeUnload)
     }, [editingNote && editingNote.id, dirty])
 
     // Expose imperative API
@@ -239,47 +193,67 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         isDirty: () => dirty,
     }), [dirty, title, content, selectedFolder, editingNote])
 
-    async function handleDelete() {
-        if (!editingNote || !editingNote.id) return
-        setLoading(true)
-        await fetch(`/api/notes/${editingNote.id}`, { method: 'DELETE', credentials: 'same-origin' })
-        setLoading(false)
-        if (onDeleted) onDeleted()
-    }
-
-    const toolbarConfig = focusMode || isCompactToolbar ? [
-        [{ header: [1, 2, false] }],
-        ['bold', 'italic', 'underline'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['link']
-    ] : [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['blockquote'],
-        ['link', 'image']
-    ]
-
     function computeFontFamily() {
-        const f = (editorSettings && editorSettings.editorFont) || 'sans-serif'
-        if (f === 'serif') return 'serif'
+        const f = (editorSettings && editorSettings.editorFont) || 'monospace'
+        if (f === 'serif') return 'Georgia, Times New Roman, serif'
         if (f === 'monospace') return 'ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace'
         return 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial'
     }
 
-    function computeWordCount(html: string) {
+    // Detect dark mode (Tailwind may toggle `class="dark"` on <html>); keep in state
+    const [isDark, setIsDark] = React.useState<boolean>(() => {
         try {
-            const div = document.createElement('div')
-            div.innerHTML = html || ''
-            const text = (div.textContent || '').trim()
-            if (!text) return 0
-            return text.split(/\s+/).filter(Boolean).length
-        } catch { return 0 }
+            if (typeof document !== 'undefined') {
+                if (document.documentElement.classList.contains('dark')) return true
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return true
+            }
+        } catch (e) { }
+        return false
+    })
+
+    useEffect(() => {
+        // Observe changes to the root's class attribute so theme flips when the app toggles dark mode
+        if (typeof document === 'undefined') return
+        const root = document.documentElement
+        const obs = new MutationObserver(() => {
+            setIsDark(root.classList.contains('dark'))
+        })
+        obs.observe(root, { attributes: true, attributeFilter: ['class'] })
+        return () => obs.disconnect()
+    }, [])
+
+    // CodeMirror themes for light/dark so we don't have to fight vendor styles with global overrides
+    const cmLightTheme = React.useMemo(() => EditorView.theme({
+        '.cm-content': { caretColor: 'rgba(0,0,0,0.85)', fontFamily: 'inherit' },
+        '.cm-scroller': { fontFamily: 'inherit' },
+        '.cm-cursor': { display: 'block', borderLeft: 'none', width: '2px', backgroundColor: 'rgba(0,0,0,0.85)' },
+        '.cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'rgba(59,130,246,0.25)' },
+        /* Make formatting chars (markdown markers, punctuation) slightly more visible */
+        '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(75,85,99,0.75)' }
+    }, { dark: false }), [])
+
+    const cmDarkTheme = React.useMemo(() => EditorView.theme({
+        '.cm-content': { caretColor: 'rgba(255,255,255,0.92)', fontFamily: 'inherit' },
+        '.cm-scroller': { fontFamily: 'inherit' },
+        '.cm-cursor': { display: 'block', borderLeft: 'none', width: '2px', backgroundColor: 'rgba(255,255,255,0.92)' },
+        '.cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'rgba(14,35,50,0.6)' },
+        /* Make formatting chars (markdown markers, punctuation) a touch brighter in dark mode */
+        '.cm-formatting, .cm-formatting-strong, .cm-formatting-quote, .cm-specialChar, .cm-punctuation, .cm-heading': { color: 'rgba(203,213,225,0.85)' }
+    }, { dark: true }), [])
+
+    function computeWordCount(md: string) {
+        const t = String(md || '')
+            .replace(/```[\s\S]*?```/g, ' ') // fenced code
+            .replace(/`[^`]*`/g, ' ') // inline code
+            .replace(/\[[^\]]*\]\([^)]*\)/g, ' ') // links/images
+            .replace(/[>#*_\-\[\]()`~]/g, ' ') // punctuation
+            .replace(/\s+/g, ' ').trim()
+        if (!t) return 0
+        return t.split(' ').length
     }
 
-    // --- Style issues overlay (display-only) ---
+    // --- Style issues via decorations ---
     function buildStyleIssuesRegex(): RegExp {
-        // English-only lists, case-insensitive; phrases use flexible whitespace
         const fillers = [
             'actually', 'basically', 'pretty much', 'sort of', 'kind of', 'really', 'very', 'quite', 'rather', 'somewhat', 'just', 'literally'
         ]
@@ -289,189 +263,74 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
         const cliches = [
             'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
         ]
-        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
         const parts = [...fillers, ...redundancies].map(escape).map(s => `\\b${s}\\b`).concat(cliches)
-        // join with alternation; use global + case-insensitive
         return new RegExp(parts.join('|'), 'gi')
     }
 
-    const recomputeStyleIssues = React.useCallback(() => {
-        if (!(editorSettings && editorSettings.styleIssues)) return
-        const wrapper = wrapperRef.current
-        const root = wrapper?.querySelector('.ql-editor') as HTMLElement | null
-        if (!wrapper || !root) return
-        // Ensure overlay exists as a child of wrapper (not inside .ql-editor) to avoid Quill DOM mutation loops
-        let overlay = styleOverlayRef.current
-        if (!overlay || !overlay.parentElement) {
-            overlay = document.createElement('div')
-            overlay.className = 'style-issues-overlay'
-            styleOverlayRef.current = overlay
-            wrapper.appendChild(overlay)
-        }
-        // Clear previous marks
-        overlay.innerHTML = ''
+    const styleIssuesExt = React.useMemo(() => {
+        if (!(editorSettings && editorSettings.styleIssues)) return [] as any
         const pattern = buildStyleIssuesRegex()
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-            acceptNode: (node: any) => {
-                if (!node || !node.nodeValue) return NodeFilter.FILTER_REJECT
-                // skip inside overlay
-                if (node.parentElement && node.parentElement.closest('.style-issues-overlay')) return NodeFilter.FILTER_REJECT
-                // Ignore whitespace-only
-                return /\S/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
-            }
-        } as any)
-        const parentRect = (overlay.parentElement as HTMLElement).getBoundingClientRect()
-        const addStrike = (rect: DOMRect) => {
-            const line = document.createElement('div')
-            line.className = 'style-issue-strike'
-            const top = rect.top - parentRect.top + Math.max(0, Math.floor(rect.height * 0.55))
-            Object.assign(line.style, {
-                position: 'absolute',
-                left: `${rect.left - parentRect.left}px`,
-                top: `${top}px`,
-                width: `${rect.width}px`,
-                height: '1.5px',
-                backgroundColor: 'rgba(220,38,38,0.8)', // red-600
-                pointerEvents: 'none'
-            } as CSSStyleDeclaration)
-            overlay!.appendChild(line)
-        }
-        const processNode = (textNode: Text) => {
-            const text = textNode.nodeValue || ''
-            let m: RegExpExecArray | null
-            pattern.lastIndex = 0
-            while ((m = pattern.exec(text))) {
-                try {
-                    const range = document.createRange()
-                    range.setStart(textNode, m.index)
-                    range.setEnd(textNode, m.index + m[0].length)
-                    const rects = range.getClientRects()
-                    for (const r of Array.from(rects)) addStrike(r)
-                } catch { /* ignore range issues */ }
-            }
-        }
-        let current: Node | null = walker.nextNode()
-        while (current) {
-            processNode(current as Text)
-            current = walker.nextNode()
-        }
+        return [
+            ViewPlugin.fromClass(class {
+                decorations: DecorationSet
+                constructor(view: EditorView) { this.decorations = this.build(view) }
+                update(update: ViewUpdate) {
+                    if (update.docChanged || update.viewportChanged) this.decorations = this.build(update.view)
+                }
+                build(view: EditorView) {
+                    const builder = new RangeSetBuilder<Decoration>()
+                    const deco = Decoration.mark({ class: 'cm-style-issue' })
+                    const text = view.state.doc.toString()
+                    pattern.lastIndex = 0
+                    let m: RegExpExecArray | null
+                    while ((m = pattern.exec(text))) {
+                        builder.add(m.index, m.index + m[0].length, deco)
+                        if (pattern.lastIndex === m.index) pattern.lastIndex++
+                    }
+                    return builder.finish()
+                }
+            }, { decorations: v => v.decorations })
+        ]
     }, [editorSettings && editorSettings.styleIssues, content])
 
-    // Keep overlay in sync: on content, scroll, resize (avoid selection-change to prevent feedback loops)
-    useEffect(() => {
-        if (!(editorSettings && editorSettings.styleIssues)) {
-            // cleanup overlay if present
-            const overlay = styleOverlayRef.current
-            if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay)
-            styleOverlayRef.current = null
-            return
-        }
-        const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
-        if (!root) return
-        const quill = quillRef.current?.getEditor?.()
-        const schedule = () => {
-            if (styleRafRef.current) cancelAnimationFrame(styleRafRef.current)
-            styleRafRef.current = requestAnimationFrame(() => {
-                styleRafRef.current = null
-                recomputeStyleIssues()
-            })
-        }
-        const onText = () => schedule()
-        const onScroll = () => schedule()
-        const onResize = () => schedule()
-        quill?.on('text-change', onText)
-        root.addEventListener('scroll', onScroll)
-        window.addEventListener('resize', onResize)
-        // initial draw after a frame to allow layout
-        const id = requestAnimationFrame(() => recomputeStyleIssues())
-        return () => {
-            if (styleRafRef.current) cancelAnimationFrame(styleRafRef.current)
-            try { quill?.off('text-change', onText) } catch { }
-            root.removeEventListener('scroll', onScroll)
-            window.removeEventListener('resize', onResize)
-            cancelAnimationFrame(id)
-        }
-    }, [editorSettings && editorSettings.styleIssues, recomputeStyleIssues])
-
-    // Helper: mark active block from a Quill index
-    const markActiveFromIndex = React.useCallback((index: number | null | undefined) => {
-        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
-        if (index == null) { setActiveBlockIndex(null); return }
-        const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
-        const quill = quillRef.current?.getEditor?.()
-        if (!root || !quill) { setActiveBlockIndex(null); return }
-        try {
-            root.querySelectorAll('.qp-active-line').forEach(el => el.classList.remove('qp-active-line'))
-            const [line] = quill.getLine(index) || []
-            if (!line || !line.domNode) { setActiveBlockIndex(null); return }
-            let el: HTMLElement | null = line.domNode as HTMLElement
-            while (el && el.parentElement && el.parentElement !== root) {
-                el = el.parentElement
-            }
-            if (!el) { setActiveBlockIndex(null); return }
-            if (root.contains(el)) {
-                el.classList.add('qp-active-line')
-                const children = Array.from(root.children)
-                const pos = children.indexOf(el)
-                setActiveBlockIndex(pos >= 0 ? pos : null)
-            }
-        } catch { setActiveBlockIndex(null) }
-    }, [editorSettings && editorSettings.focusCurrentParagraph])
-
-    // Update active line highlighting when selection or content changes
-    useEffect(() => {
-        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
-        if (!wrapperRef.current) return
-        const root = wrapperRef.current.querySelector('.ql-editor') as HTMLElement | null
-        if (!root) return
-        // If one is already marked and still in DOM, keep it
-        const existing = root.querySelector('.qp-active-line') as HTMLElement | null
-        if (existing && root.contains(existing)) return
-        if (activeBlockIndex == null) return
-        const children = Array.from(root.children)
-        const el = children[activeBlockIndex] as HTMLElement | undefined
-        if (el) el.classList.add('qp-active-line')
-    }, [activeBlockIndex, content, editorSettings && editorSettings.focusCurrentParagraph])
-
-    // When toggling the setting ON or after content updates, ensure a selection maps to an active line
-    useEffect(() => {
-        if (!(editorSettings && editorSettings.focusCurrentParagraph)) {
-            // clear any leftover active-line when feature is off
-            const root = wrapperRef.current?.querySelector('.ql-editor') as HTMLElement | null
-            if (root) root.querySelectorAll('.qp-active-line').forEach(el => el.classList.remove('qp-active-line'))
-            return
-        }
-        const quill = quillRef.current?.getEditor?.()
-        if (!quill) return
-        const sel = quill.getSelection?.()
-        if (!sel || sel.index == null) return
-        // apply on next frame to avoid racing Quill DOM updates
-        requestAnimationFrame(() => markActiveFromIndex(sel.index))
-    }, [content, editorSettings && editorSettings.focusCurrentParagraph])
-
-    // Attach native Quill listeners for robust selection tracking
-    useEffect(() => {
-        const quill = quillRef.current?.getEditor?.()
-        if (!quill) return
-        function onSel(range: any) {
-            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
-            const idx = range && typeof range.index === 'number' ? range.index : null
-            markActiveFromIndex(idx as any)
-        }
-        function onText() {
-            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
-            const sel = quill.getSelection?.()
-            markActiveFromIndex(sel && sel.index)
-        }
-        quill.on('selection-change', onSel)
-        quill.on('text-change', onText)
-        return () => {
-            try {
-                quill.off('selection-change', onSel)
-                quill.off('text-change', onText)
-            } catch { /* ignore */ }
-        }
-    }, [editorSettings && editorSettings.focusCurrentParagraph, markActiveFromIndex])
+    const focusParagraphExt = React.useMemo(() => {
+        if (!(editorSettings && editorSettings.focusCurrentParagraph)) return [] as any
+        return [
+            ViewPlugin.fromClass(class {
+                decorations: DecorationSet
+                constructor(view: EditorView) { this.decorations = this.build(view) }
+                update(update: ViewUpdate) {
+                    if (update.selectionSet || update.docChanged) this.decorations = this.build(update.view)
+                }
+                build(view: EditorView) {
+                    const sel = view.state.selection.main
+                    const head = sel.head
+                    const doc = view.state.doc
+                    const cur = doc.lineAt(head)
+                    let start = cur.number
+                    for (let n = cur.number; n >= 1; n--) {
+                        const ln = doc.line(n)
+                        if (ln.text.trim() === '' && n !== cur.number) { start = n + 1; break }
+                        if (n === 1) start = 1
+                    }
+                    let end = cur.number
+                    for (let n = cur.number; n <= doc.lines; n++) {
+                        const ln = doc.line(n)
+                        if (ln.text.trim() === '' && n !== cur.number) { end = n - 1; break }
+                        if (n === doc.lines) end = doc.lines
+                    }
+                    const builder = new RangeSetBuilder<Decoration>()
+                    const lineDeco = Decoration.line({ class: 'cm-active-paragraph' })
+                    for (let n = start; n <= end; n++) {
+                        const ln = doc.line(n)
+                        builder.add(ln.from, ln.from, lineDeco)
+                    }
+                    return builder.finish()
+                }
+            }, { decorations: v => v.decorations })
+        ]
+    }, [editorSettings && editorSettings.focusCurrentParagraph, content])
 
     const containerClass = `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
 
@@ -485,9 +344,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         onChange={e => {
                             const newTitle = e.target.value
                             setTitle(newTitle)
-                            const isDirty = newTitle !== initialTitle || normalizeEditorHtml(content) !== normalizeEditorHtml(initialContent)
+                            const isDirty = newTitle !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
                             setDirty(isDirty)
-                            if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
+                            onDirtyChange?.(editingNote?.id || '', isDirty)
                         }}
                         className={`w-full ${focusMode ? 'text-3xl md:text-4xl' : 'text-xl'} font-semibold bg-transparent border-b dark:border-slate-800/30 pb-2 outline-none`}
                         placeholder="Untitled"
@@ -512,27 +371,25 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             </div>
 
             <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-quill-wrapper flex-1 safe-area ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
-                    <ReactQuill
-                        ref={quillRef}
-                        theme="snow"
+                <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-cm-wrapper flex-1 safe-area ${editorSettings && editorSettings.focusCurrentParagraph ? 'cm-focus-current' : ''} ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
+                    <CodeMirror
                         value={content}
-                        onChange={(val: string) => {
-                            const normalized = normalizeEditorHtml(val)
+                        height="100%"
+                        basicSetup={{ lineNumbers: false, highlightActiveLine: false }}
+                        extensions={[markdown(), EditorView.lineWrapping, isDark ? cmDarkTheme : cmLightTheme, ...styleIssuesExt, ...focusParagraphExt]}
+                        onCreateEditor={(view: EditorView) => { cmViewRef.current = view }}
+                        onChange={(val) => {
+                            const normalized = normalizeContent(val)
                             setContent(normalized)
                             const isDirty = title !== initialTitle || normalized !== initialContent
                             setDirty(isDirty)
-                            if (onDirtyChange) onDirtyChange(editingNote?.id || '', isDirty)
+                            onDirtyChange?.(editingNote?.id || '', isDirty)
                         }}
-                        onChangeSelection={(range) => {
-                            // Keep this as a lightweight hook; native quill listeners drive the logic
-                            if (!(editorSettings && editorSettings.focusCurrentParagraph)) return
-                            const idx = range && typeof range.index === 'number' ? range.index : null
-                            markActiveFromIndex(idx as any)
-                        }}
-                        style={{ height: '100%' }}
-                        className={`h-full ${editorSettings && editorSettings.focusCurrentParagraph ? 'qp-focus-current' : ''}`}
-                        modules={{ toolbar: toolbarConfig }}
+                        theme={EditorView.theme({
+                            '.cm-content': { fontFamily: 'inherit' },
+                            '.cm-scroller': { fontFamily: 'inherit' },
+                        })}
+                        className={`h-full cm-editor ${focusMode ? 'cm-focus-mode' : ''}`}
                     />
                 </div>
 
