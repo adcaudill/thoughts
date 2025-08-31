@@ -5,5 +5,13 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         setupFiles: ['./test/setupTests.ts'],
+        pool: 'threads',
+        poolOptions: {
+            threads: {
+                minThreads: 1,
+                maxThreads: 2,
+            },
+        },
+        maxConcurrency: 1,
     },
 })

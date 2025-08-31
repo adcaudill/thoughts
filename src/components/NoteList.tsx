@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react'
-import { getNotes } from '../lib/api'
+import React, { useEffect, useMemo, useState } from 'react'
+import { getNotes, getLocalNote } from '../lib/offlineApi'
 import { getNoteKey } from '../lib/session'
 import { decryptNotePayload } from '../lib/crypto'
+import { search as searchIndex, getIndex } from '../lib/search'
 
 type NoteSummary = { id: string; title: string }
 
 // onSelect receives either a full note object { id, title, content } or at minimum { id }
 export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteIds }: { folderId?: string | undefined; onSelect: (note: { id: string; title?: string; content?: string; folder_id?: string }) => void; refreshSignal?: number; dirtyNoteIds?: Record<string, boolean> }) {
     const [notes, setNotes] = useState<Array<NoteSummary>>([])
+    const [query, setQuery] = useState('')
+    const [searching, setSearching] = useState(false)
+    const [searchNotes, setSearchNotes] = useState<Array<NoteSummary>>([])
 
     useEffect(() => {
         async function load() {
@@ -37,6 +41,46 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
         load()
     }, [refreshSignal, folderId])
 
+    // Run encrypted search when query changes (min length 2)
+    useEffect(() => {
+        let cancelled = false
+        async function runSearch() {
+            const q = query.trim()
+            if (q.length < 2) { setSearchNotes([]); setSearching(false); return }
+            setSearching(true)
+            try {
+                // Ensure index is present
+                if (!getIndex()) { setSearchNotes([]); return }
+                const results = searchIndex(q)
+                const key = getNoteKey()
+                const out: Array<NoteSummary> = []
+                for (const r of results) {
+                    if (cancelled) break
+                    const n = await getLocalNote(r.id)
+                    if (!n) continue
+                    let title = n.id
+                    if (key && n.content_encrypted && n.nonce) {
+                        try {
+                            const decrypted = await decryptNotePayload(key, n.content_encrypted, n.nonce)
+                            try {
+                                const parsed = JSON.parse(decrypted)
+                                title = parsed.title || parsed.content?.slice(0, 100) || n.id
+                            } catch {
+                                title = decrypted.slice(0, 80)
+                            }
+                        } catch { /* ignore */ }
+                    }
+                    out.push({ id: n.id, title })
+                }
+                if (!cancelled) setSearchNotes(out)
+            } finally {
+                if (!cancelled) setSearching(false)
+            }
+        }
+        runSearch()
+        return () => { cancelled = true }
+    }, [query])
+
     async function loadAndSelect(id: string) {
         try {
             const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
@@ -57,14 +101,42 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
         }
     }
 
+    const showingSearch = useMemo(() => query.trim().length >= 2, [query])
+    const list = showingSearch ? searchNotes : notes
+
     return (
         <div className="p-2">
             <div className="flex items-center justify-between mb-2 px-1">
                 <h3 className="font-medium text-sm tracking-wide text-slate-600">Notes</h3>
                 <button className="text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100" onClick={() => onSelect({ id: '', title: '', content: '' })} aria-label="new-note">+ New</button>
             </div>
+            <div className="mb-2 px-1">
+                <div className="relative">
+                    <input
+                        aria-label="search-notes"
+                        placeholder="Search notes…"
+                        className="border dark:border-slate-800/30 px-2 py-1.5 text-sm pr-8 w-full min-w-0 rounded"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                    />
+                    {query && (
+                        <button
+                            aria-label="clear-search"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                            onClick={() => setQuery('')}
+                        >
+                            <i className="fa-solid fa-xmark" aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+                {showingSearch && (
+                    <div className="mt-1 text-xs text-slate-500">
+                        {searching ? 'Searching…' : `${list.length} result${list.length === 1 ? '' : 's'}`}
+                    </div>
+                )}
+            </div>
             <ul className="space-y-1 text-sm">
-                {notes.map(n => (
+                {list.map(n => (
                     <li key={n.id} className="py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between" onClick={() => loadAndSelect(n.id)}>
                         <span className="flex items-center gap-2">
                             <span>{n.title}</span>
@@ -74,6 +146,9 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
                         ) : null}
                     </li>
                 ))}
+                {list.length === 0 && (
+                    <li className="py-1 px-2 text-slate-500">{showingSearch ? 'No results' : 'No notes'}</li>
+                )}
             </ul>
         </div>
     )

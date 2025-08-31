@@ -12,7 +12,8 @@ import EditorStatusBar from './EditorStatusBar'
 import NoteInfoDialog from './NoteInfoDialog'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
-import { createNote, updateNote, getFolders } from '../lib/api'
+import { createNote, updateNote } from '../lib/offlineApi'
+import { getFolders } from '../lib/api'
 
 export type EditorHandle = {
     save: () => Promise<void>

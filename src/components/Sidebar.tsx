@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { decryptNotePayload, encryptNotePayload } from '../lib/crypto'
-import { createFolder, updateFolder, deleteFolder, getFolders, getFolderStats } from '../lib/api'
+import { getFolderStats } from '../lib/api'
+import * as offline from '../lib/offlineApi'
+import { getDB } from '../lib/db'
 
 type Folder = {
     id: string
@@ -31,9 +33,9 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
 
     async function loadFolders() {
         try {
-            const j = await getFolders()
+            const j = await offline.getFolders()
             if (!j.ok) {
-                setError(j.error || 'failed')
+                setError('failed')
                 setFolders([])
                 setNameDisplayMap({})
             } else {
@@ -81,25 +83,70 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     }
 
     useEffect(() => { loadFolders() }, [])
-
-    // Refresh stats after a note is saved so progress rings update live
+    // refresh when background updated
     useEffect(() => {
-        function onNoteSaved() {
-            if (!folders || folders.length === 0) return
-            const hasGoals = folders.some((x: any) => Number(x.goal_word_count) > 0)
-            if (!hasGoals) return
-            getFolderStats()
-                .then((statsRes: any) => {
+        // When background refresh finishes, only read from local DB to avoid kicking off another refresh.
+        const h = async () => {
+            try {
+                const db = await getDB()
+                const local = await db.getAll('folders')
+                setFolders(local as any)
+                // Only fetch stats if any folder has a goal set
+                const hasGoals = (local as any[]).some((x: any) => Number(x.goal_word_count) > 0)
+                if (hasGoals) {
+                    const statsRes = await getFolderStats().catch(() => ({ ok: false, stats: [] }))
                     const statMap: Record<string, number> = {}
                     if (statsRes && statsRes.ok && Array.isArray(statsRes.stats)) {
                         for (const s of statsRes.stats) statMap[s.id] = Number(s.total_words || 0)
                     }
                     setFolderWordTotals(statMap)
-                })
-                .catch(() => { /* ignore */ })
+                } else {
+                    setFolderWordTotals({})
+                }
+                // Update display names (decrypt when possible)
+                const map: Record<string, string> = {}
+                await Promise.all((local as any[]).map(async (folder: any) => {
+                    if (folder.is_default === 1) { map[folder.id] = 'Inbox'; return }
+                    const val = folder.name_encrypted || ''
+                    if (noteKey && val.includes('.')) {
+                        try {
+                            const [nonceB64, cipherB64] = val.split('.')
+                            const plain = await decryptNotePayload(noteKey, cipherB64, nonceB64)
+                            map[folder.id] = plain || 'Untitled'
+                        } catch { map[folder.id] = val || 'Untitled' }
+                    } else { map[folder.id] = val || 'Untitled' }
+                }))
+                setNameDisplayMap(map)
+            } catch {
+                // ignore
+            }
+        }
+        window.addEventListener('folders-refreshed', h)
+        return () => window.removeEventListener('folders-refreshed', h)
+    }, [])
+
+    // Refresh stats after a note is saved so progress rings update live
+    useEffect(() => {
+        let t: any
+        function onNoteSaved() {
+            if (!folders || folders.length === 0) return
+            const hasGoals = folders.some((x: any) => Number(x.goal_word_count) > 0)
+            if (!hasGoals) return
+            clearTimeout(t)
+            t = setTimeout(() => {
+                getFolderStats()
+                    .then((statsRes: any) => {
+                        const statMap: Record<string, number> = {}
+                        if (statsRes && statsRes.ok && Array.isArray(statsRes.stats)) {
+                            for (const s of statsRes.stats) statMap[s.id] = Number(s.total_words || 0)
+                        }
+                        setFolderWordTotals(statMap)
+                    })
+                    .catch(() => { /* ignore */ })
+            }, 250)
         }
         window.addEventListener('note-saved', onNoteSaved)
-        return () => window.removeEventListener('note-saved', onNoteSaved)
+        return () => { clearTimeout(t); window.removeEventListener('note-saved', onNoteSaved) }
     }, [folders])
 
     const tree = folders ? buildTree(folders) : []
@@ -160,7 +207,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                 payloadName = val
             }
         }
-        await createFolder({ name_encrypted: payloadName })
+        await offline.createFolder({ name_encrypted: payloadName })
         setNewFolderName('')
         await loadFolders()
     }
@@ -194,7 +241,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                                             }
                                             const goalStr = goalMap[node.id]
                                             const goalNum = goalStr === '' ? null : Number(goalStr)
-                                            await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
+                                            await offline.updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
                                             stopEditing(node.id)
                                             await loadFolders()
                                         } else if (e.key === 'Escape') {
@@ -222,7 +269,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                                             }
                                             const goalStr = goalMap[node.id]
                                             const goalNum = goalStr === '' ? null : Number(goalStr)
-                                            await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
+                                            await offline.updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum })
                                             stopEditing(node.id)
                                             await loadFolders()
                                         }
@@ -249,9 +296,9 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                     )}
                     <div className="flex items-center gap-2 self-start">
                         {!editing && <button aria-label={`rename-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => startEditing(node.id, node.name_encrypted || '', node.goal_word_count ?? null)}><i className="fa-solid fa-pen-to-square" aria-hidden="true" /> <span className="sr-only">rename</span></button>}
-                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } const goalStr = goalMap[node.id]; const goalNum = goalStr === '' ? null : Number(goalStr); await updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
+                        {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } const goalStr = goalMap[node.id]; const goalNum = goalStr === '' ? null : Number(goalStr); await offline.updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
                         {editing && <button aria-label={`cancel-${node.id}`} className="text-xs text-slate-500" onClick={() => stopEditing(node.id)}><i className="fa-solid fa-xmark" aria-hidden="true" /></button>}
-                        {node.is_default !== 1 && <button aria-label={`delete-${node.id}`} className="text-xs text-red-600 flex items-center gap-1" onClick={async () => { if (!confirm('Delete folder? This will move notes to Inbox.')) return; await deleteFolder(node.id); await loadFolders() }}><i className="fa-solid fa-trash" aria-hidden="true" /></button>}
+                        {node.is_default !== 1 && <button aria-label={`delete-${node.id}`} className="text-xs text-red-600 flex items-center gap-1" onClick={async () => { if (!confirm('Delete folder? This will move notes to Inbox.')) return; await offline.deleteFolder(node.id); await loadFolders() }}><i className="fa-solid fa-trash" aria-hidden="true" /></button>}
                     </div>
                 </div>
                 {node.children && node.children.length > 0 && (

@@ -15,7 +15,11 @@
         "resolveJsonModule": true
     },
     "include": [
-        "src",
-        "types"
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "types/**/*.d.ts"
+    ],
+    "exclude": [
+        "src/sw.ts"
     ]
 }

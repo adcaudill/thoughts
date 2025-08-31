@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { getSettings, updateSettings } from '../lib/api'
+import * as offline from '../lib/offlineApi'
 
 type Props = { open: boolean; onClose: () => void; onSaved?: (settings: any) => void }
 
@@ -29,7 +29,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
         if (!open) return
         let mounted = true
         setLoading(true)
-        getSettings().then((res: any) => {
+        offline.getSettings().then((res: any) => {
             if (!mounted) return
             if (res && res.ok) {
                 const s = res.settings || {}
@@ -55,7 +55,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
         setLoading(true)
         const ignoresArr = styleIgnores.split(',').map(s => s.trim()).filter(Boolean)
         const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues, typewriterScrolling, styleCheckOptions: { enabled: styleEnabled, longSentenceWordLimit, ignores: ignoresArr } }
-        const res = await updateSettings(payload)
+        const res = await offline.updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
             setDirty(false)
