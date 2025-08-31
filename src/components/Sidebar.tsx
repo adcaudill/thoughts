@@ -364,9 +364,8 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                                 <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label={`folder-${node.id}`}>{displayName}</button>
                             )}
                             {goal && goal > 0 ? (
-                                <div className="ml-1 flex items-center gap-1 text-xs text-slate-500">
+                                <div className="ml-1" title={`${Math.min(totalWords, goal)}/${goal} words`}>
                                     <ProgressRing value={totalWords} goal={goal} />
-                                    <span>{Math.min(totalWords, goal)}/{goal}</span>
                                 </div>
                             ) : null}
                         </div>
