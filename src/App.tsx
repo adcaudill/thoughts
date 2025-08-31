@@ -201,6 +201,21 @@ export default function App() {
                     {/* Main writing pane */}
                     <section className={`flex-1 h-full flex ${focusMode ? 'justify-center' : ''} overflow-hidden`}>
                         <div className={`${focusMode ? 'w-full max-w-4xl' : 'w-full'} h-full flex flex-col min-h-0 overflow-hidden`}>
+                            {focusMode && (
+                                <div className={`sticky top-0 z-30 transition-opacity duration-200 ${zenHeaderVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                    <div className="px-4 py-2 flex items-center justify-between bg-white/95 dark:bg-slate-950/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+                                        <div className="text-sm text-slate-600 dark:text-slate-300">Focus mode</div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">Press Esc to exit</span>
+                                            <button
+                                                className="text-sm px-3 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                onClick={() => setFocusMode(false)}
+                                                aria-label="Exit focus mode"
+                                            >Exit</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex-1 min-h-0">
                                 <Editor
                                     ref={editorRef}
