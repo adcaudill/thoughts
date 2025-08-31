@@ -6,6 +6,7 @@ import '../styles/editor.css'
 import { useReadingStats } from '../hooks/useReadingStats'
 import { useStyleIssuesExt } from '../hooks/useStyleIssuesExt'
 import { useFocusParagraphExt } from '../hooks/useFocusParagraphExt'
+import { useTypewriterScrollExt } from '../hooks/useTypewriterScrollExt'
 import EditorHeader from './EditorHeader'
 import EditorStatusBar from './EditorStatusBar'
 import NoteInfoDialog from './NoteInfoDialog'
@@ -323,7 +324,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const [noteInfoOpen, setNoteInfoOpen] = useState(false)
 
     const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
-    const focusParagraphExt = useFocusParagraphExt(!!(editorSettings && editorSettings.focusCurrentParagraph), content)
+    const focusOn = !!(editorSettings && editorSettings.focusCurrentParagraph)
+    const focusParagraphExt = useFocusParagraphExt(focusOn, content)
+    const typewriterOn = focusOn || !!focusMode
+    const typewriterExt = useTypewriterScrollExt(typewriterOn)
 
     const containerClass = layout === 'immersive'
         ? 'h-full flex flex-col px-6 md:px-10 py-6'
@@ -388,7 +392,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         value={content}
                         height="100%"
                         basicSetup={{ lineNumbers: false, highlightActiveLine: false }}
-                        extensions={[markdown(), EditorView.lineWrapping, isDark ? cmDarkTheme : cmLightTheme, ...styleIssuesExt, ...focusParagraphExt]}
+                        extensions={[markdown(), EditorView.lineWrapping, isDark ? cmDarkTheme : cmLightTheme, ...styleIssuesExt, ...focusParagraphExt, ...typewriterExt]}
                         onCreateEditor={(view: EditorView) => { cmViewRef.current = view }}
                         onChange={(val) => {
                             const normalized = normalizeContent(val)
@@ -401,7 +405,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                             '.cm-content': { fontFamily: 'inherit' },
                             '.cm-scroller': { fontFamily: 'inherit' },
                         })}
-                        className={`h-full cm-editor ${focusMode ? 'cm-focus-mode' : ''}`}
+                        className={`h-full cm-editor ${focusMode ? 'cm-focus-mode' : ''} ${typewriterOn ? 'cm-typewriter' : ''}`}
                     />
                 </div>
 

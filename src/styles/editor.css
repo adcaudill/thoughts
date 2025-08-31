@@ -28,6 +28,14 @@
     word-break: break-word;
 }
 
+/* Typewriter mode: allow scroll past end so caret can center at bottom */
+.cm-typewriter .cm-content::after {
+    content: '';
+    display: block;
+    height: 40vh;
+    /* gives room to center last lines */
+}
+
 /* Paragraph focus: dim non-active paragraphs subtly */
 .cm-focus-current .cm-line {
     opacity: 0.45;
