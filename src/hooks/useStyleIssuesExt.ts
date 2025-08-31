@@ -1,40 +1,62 @@
 import { useMemo } from 'react'
-import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view'
+import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, hoverTooltip, Tooltip } from '@codemirror/view'
 import { RangeSetBuilder } from '@codemirror/state'
+import { findStyleIssues, Issue, StyleCheckOptions } from '../lib/styleCheck'
 
-export function useStyleIssuesExt(enabled: boolean, content: string) {
+export function useStyleIssuesExt(enabled: boolean, content: string, options?: StyleCheckOptions) {
     return useMemo(() => {
         if (!enabled) return [] as any
-        const fillers = [
-            'actually', 'basically', 'pretty much', 'sort of', 'kind of', 'really', 'very', 'quite', 'rather', 'somewhat', 'just', 'literally'
-        ]
-        const redundancies = [
-            'basic fundamentals', 'close proximity', 'end result', 'free gift', 'final outcome', 'past history', 'advance planning', 'added bonus', 'plan ahead', 'revert back', 'unexpected surprise', 'true facts', 'fall down', 'combine together', 'join together'
-        ]
-        const cliches = [
-            'against all odds', 'at the end of the day', 'back to square one', 'ballpark figure', 'big picture', 'crystal clear', 'dead as a doornail', 'in the nick of time', 'light at the end of the tunnel', 'long and short of it', 'low[-\\s]?hanging fruit', 'move the needle', 'needle in a haystack', 'think outside the box', 'tip of the iceberg', 'touch base', 'under the radar', 'brass tacks'
-        ]
-        const escape = (s: string) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
-        const parts = [...fillers, ...redundancies].map(escape).map(s => `\\b${s}\\b`).concat(cliches)
-        const pattern = new RegExp(parts.join('|'), 'gi')
-        return [
-            ViewPlugin.fromClass(class {
-                decorations: DecorationSet
-                constructor(view: EditorView) { this.decorations = this.build(view) }
-                update(update: ViewUpdate) { if (update.docChanged || update.viewportChanged) this.decorations = this.build(update.view) }
-                build(view: EditorView) {
-                    const builder = new RangeSetBuilder<Decoration>()
-                    const deco = Decoration.mark({ class: 'cm-style-issue' })
-                    const text = view.state.doc.toString()
-                    pattern.lastIndex = 0
-                    let m: RegExpExecArray | null
-                    while ((m = pattern.exec(text))) {
-                        builder.add(m.index, m.index + m[0].length, deco)
-                        if (pattern.lastIndex === m.index) pattern.lastIndex++
-                    }
-                    return builder.finish()
+
+        const decoFor = (issue: Issue) => {
+            const baseClass = 'cm-style-issue'
+            const cls = `${baseClass} cm-style-${issue.category}`
+            return Decoration.mark({ class: cls })
+        }
+
+        const plugin = ViewPlugin.fromClass(class {
+            decorations: DecorationSet
+            constructor(view: EditorView) { this.decorations = this.build(view) }
+            update(update: ViewUpdate) {
+                if (update.docChanged || update.viewportChanged) this.decorations = this.build(update.view)
+            }
+            build(view: EditorView) {
+                const builder = new RangeSetBuilder<Decoration>()
+                const doc = view.state.doc
+                for (const vr of view.visibleRanges) {
+                    const text = doc.sliceString(vr.from, vr.to)
+                    const issues = findStyleIssues(text, { longSentenceWordLimit: 28, ...(options || {}) }, vr.from)
+                    for (const it of issues) builder.add(it.from, it.to, decoFor(it))
                 }
-            }, { decorations: v => v.decorations })
-        ]
-    }, [enabled, content])
+                return builder.finish()
+            }
+        }, { decorations: v => v.decorations })
+
+        // Tooltip on hover across categories
+        const tooltip = hoverTooltip((view, pos, side): Tooltip | null => {
+            const { decorations } = (plugin as any).pluginSpec
+                ? (view as any).plugin(plugin).value
+                : { decorations: null }
+            // Fallback: inspect decorations in viewport
+            const iter = (view as any).state.field ? null : null
+            // Use DOM hit testing: check if class is present at pos
+            const line = view.state.doc.lineAt(pos)
+            const text = view.state.doc.sliceString(line.from, line.to)
+            // Cheap scan for issues overlapping pos within the line range
+            const issues = findStyleIssues(text, { longSentenceWordLimit: 28 }, line.from)
+            const found = issues.find(i => pos >= i.from && pos <= i.to)
+            if (!found) return null
+            return {
+                pos: found.from,
+                end: found.to,
+                create() {
+                    const dom = document.createElement('div')
+                    dom.className = 'cm-style-tooltip'
+                    dom.textContent = found.message
+                    return { dom }
+                }
+            }
+        }, { hoverTime: 150 })
+
+        return [plugin, tooltip]
+    }, [enabled, content, options && JSON.stringify(options)])
 }

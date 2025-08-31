@@ -21,6 +21,9 @@ export default function Settings({ open, onClose, onSaved }: Props) {
     const [focusCurrentParagraph, setFocusCurrentParagraph] = useState(false)
     const [styleIssues, setStyleIssues] = useState(false)
     const [typewriterScrolling, setTypewriterScrolling] = useState(false)
+    const [styleEnabled, setStyleEnabled] = useState({ weasel: true, redundancy: true, cliche: true, adverb: true, passive: true, longSentence: true, nominalization: true, expletive: true })
+    const [longSentenceWordLimit, setLongSentenceWordLimit] = useState<number>(28)
+    const [styleIgnores, setStyleIgnores] = useState<string>('')
 
     useEffect(() => {
         if (!open) return
@@ -35,6 +38,12 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 if (typeof s.showReadingTime === 'boolean') setShowReadingTime(s.showReadingTime)
                 if (typeof s.focusCurrentParagraph === 'boolean') setFocusCurrentParagraph(s.focusCurrentParagraph)
                 if (typeof s.styleIssues === 'boolean') setStyleIssues(s.styleIssues)
+                if (s.styleCheckOptions && typeof s.styleCheckOptions === 'object') {
+                    const o: any = s.styleCheckOptions
+                    if (o.enabled && typeof o.enabled === 'object') setStyleEnabled({ ...styleEnabled, ...o.enabled })
+                    if (typeof o.longSentenceWordLimit === 'number') setLongSentenceWordLimit(o.longSentenceWordLimit)
+                    if (Array.isArray(o.ignores)) setStyleIgnores(o.ignores.join(', '))
+                }
                 if (typeof s.typewriterScrolling === 'boolean') setTypewriterScrolling(s.typewriterScrolling)
                 setDirty(false)
             }
@@ -44,7 +53,8 @@ export default function Settings({ open, onClose, onSaved }: Props) {
 
     async function save() {
         setLoading(true)
-        const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues, typewriterScrolling }
+        const ignoresArr = styleIgnores.split(',').map(s => s.trim()).filter(Boolean)
+        const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues, typewriterScrolling, styleCheckOptions: { enabled: styleEnabled, longSentenceWordLimit, ignores: ignoresArr } }
         const res = await updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
@@ -118,6 +128,42 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                             <span className="text-sm">Highlight style issues</span>
                         </label>
                         <p className="text-xs text-slate-500 mt-1">Visually strikes out words and phrases that are often considered weak or redundant in English writing. This is a display-only aid and does not change your note content.</p>
+                        {styleIssues && (
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.weasel} onChange={e => { setStyleEnabled({ ...styleEnabled, weasel: e.target.checked }); setDirty(true) }} /> Weasel words
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.redundancy} onChange={e => { setStyleEnabled({ ...styleEnabled, redundancy: e.target.checked }); setDirty(true) }} /> Redundancies
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.cliche} onChange={e => { setStyleEnabled({ ...styleEnabled, cliche: e.target.checked }); setDirty(true) }} /> Clichés
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.adverb} onChange={e => { setStyleEnabled({ ...styleEnabled, adverb: e.target.checked }); setDirty(true) }} /> Adverbs
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.passive} onChange={e => { setStyleEnabled({ ...styleEnabled, passive: e.target.checked }); setDirty(true) }} /> Passive voice
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.longSentence} onChange={e => { setStyleEnabled({ ...styleEnabled, longSentence: e.target.checked }); setDirty(true) }} /> Long sentences
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.nominalization} onChange={e => { setStyleEnabled({ ...styleEnabled, nominalization: e.target.checked }); setDirty(true) }} /> Nominalizations
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={styleEnabled.expletive} onChange={e => { setStyleEnabled({ ...styleEnabled, expletive: e.target.checked }); setDirty(true) }} /> Expletives (There is/It is … that)
+                                </label>
+                                <div className="col-span-2 flex items-center gap-2">
+                                    <label className="text-sm min-w-[12rem]">Long sentence word limit</label>
+                                    <input type="number" className="border rounded px-2 py-1 w-24" value={longSentenceWordLimit} min={5} max={200} onChange={e => { setLongSentenceWordLimit(Number(e.target.value)); setDirty(true) }} />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm mb-1">Ignore phrases (comma-separated)</label>
+                                    <input type="text" className="border rounded px-2 py-1 w-full" value={styleIgnores} onChange={e => { setStyleIgnores(e.target.value); setDirty(true) }} placeholder="actually, in order to, end result" />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

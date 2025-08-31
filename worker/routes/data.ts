@@ -241,7 +241,7 @@ router.delete('/api/notes/:id', async request => {
 // Schema is validated server-side to avoid arbitrary data injection.
 function validateSettings(obj: any) {
     if (!obj || typeof obj !== 'object') return { valid: false, error: 'invalid payload' }
-    const allowedKeys = ['editorFont', 'showWordCount', 'showReadingTime', 'focusCurrentParagraph', 'styleIssues', 'typewriterScrolling']
+    const allowedKeys = ['editorFont', 'showWordCount', 'showReadingTime', 'focusCurrentParagraph', 'styleIssues', 'typewriterScrolling', 'styleCheckOptions']
     const result: any = {}
     for (const k of Object.keys(obj)) {
         if (!allowedKeys.includes(k)) return { valid: false, error: `unknown setting '${k}'` }
@@ -283,6 +283,41 @@ function validateSettings(obj: any) {
     if (obj.typewriterScrolling !== undefined) {
         if (typeof obj.typewriterScrolling !== 'boolean') return { valid: false, error: 'typewriterScrolling must be boolean' }
         result.typewriterScrolling = obj.typewriterScrolling
+    }
+    if (obj.styleCheckOptions !== undefined) {
+        const o = obj.styleCheckOptions
+        if (!o || typeof o !== 'object') return { valid: false, error: 'styleCheckOptions must be object' }
+        const out: any = {}
+        if (o.longSentenceWordLimit !== undefined) {
+            const n = Number(o.longSentenceWordLimit)
+            if (!Number.isFinite(n)) return { valid: false, error: 'longSentenceWordLimit must be number' }
+            if (n < 5 || n > 200) return { valid: false, error: 'longSentenceWordLimit out of range' }
+            out.longSentenceWordLimit = Math.round(n)
+        }
+        if (o.enabled !== undefined) {
+            if (!o.enabled || typeof o.enabled !== 'object') return { valid: false, error: 'enabled must be object' }
+            const allowedCats = ['weasel', 'redundancy', 'cliche', 'adverb', 'passive', 'longSentence', 'nominalization', 'expletive']
+            const enabled: any = {}
+            for (const k of Object.keys(o.enabled)) {
+                if (!allowedCats.includes(k)) return { valid: false, error: `unknown category '${k}'` }
+                if (typeof o.enabled[k] !== 'boolean') return { valid: false, error: `enabled.${k} must be boolean` }
+                enabled[k] = o.enabled[k]
+            }
+            out.enabled = enabled
+        }
+        if (o.ignores !== undefined) {
+            if (!Array.isArray(o.ignores)) return { valid: false, error: 'ignores must be array' }
+            const clean: string[] = []
+            for (const v of o.ignores) {
+                if (typeof v !== 'string') return { valid: false, error: 'ignores must be strings' }
+                const trimmed = v.trim()
+                if (!trimmed) continue
+                if (trimmed.length > 100) return { valid: false, error: 'ignore too long' }
+                clean.push(trimmed)
+            }
+            out.ignores = clean
+        }
+        result.styleCheckOptions = out
     }
     return { valid: true, value: result }
 }

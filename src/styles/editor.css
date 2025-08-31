@@ -53,21 +53,65 @@
     opacity: 1;
 }
 
-/* Style issues: subtle red strike overlay using background gradient */
+/* Style issues: category underlines */
 .cm-style-issue {
-    background-image: linear-gradient(currentColor, currentColor);
-    background-position: 0 85%;
-    background-repeat: no-repeat;
-    background-size: 100% 1px;
-    color: inherit;
+    color: inherit
 }
 
-.cm-style-issue {
-    color: rgb(220 38 38);
+.cm-style-weasel {
+    text-decoration: underline dotted rgba(234, 179, 8, 0.9);
+    text-underline-offset: 3px
 }
 
-:root.dark .cm-style-issue {
-    color: rgb(248 113 113);
+.cm-style-redundancy {
+    text-decoration: underline solid rgba(220, 38, 38, 0.95);
+    text-underline-offset: 3px
+}
+
+.cm-style-cliche {
+    text-decoration: underline solid rgba(239, 68, 68, 0.95);
+    text-underline-offset: 3px
+}
+
+.cm-style-adverb {
+    text-decoration: underline dotted rgba(59, 130, 246, 0.9);
+    text-underline-offset: 3px
+}
+
+.cm-style-passive {
+    text-decoration: underline wavy rgba(124, 58, 237, 0.95);
+    text-underline-offset: 3px
+}
+
+.cm-style-longSentence {
+    background: linear-gradient(to bottom, transparent 75%, rgba(148, 163, 184, 0.35) 0)
+}
+
+.cm-style-nominalization {
+    text-decoration: underline dotted rgba(14, 116, 144, 0.95);
+    text-underline-offset: 3px
+}
+
+.cm-style-expletive {
+    text-decoration: underline wavy rgba(234, 88, 12, 0.95);
+    text-underline-offset: 3px
+}
+
+.cm-style-tooltip {
+    max-width: 360px;
+    font-size: 12px;
+    color: rgb(15 23 42);
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    padding: 6px 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+:root.dark .cm-style-tooltip {
+    color: rgb(226 232 240);
+    background: rgb(2 6 23);
+    border-color: rgba(255, 255, 255, 0.15);
 }
 
 /* Focus editor container polish */

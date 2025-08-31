@@ -355,7 +355,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const { words, readingTimeMin, readingDifficulty, fleschScore, sentences, syllables, characters, fleschKincaid, automatedReadabilityIndex } = useReadingStats(content, !!(editorSettings && editorSettings.showReadingTime))
     const [noteInfoOpen, setNoteInfoOpen] = useState(false)
 
-    const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
+    const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content, (editorSettings && editorSettings.styleCheckOptions) || undefined)
     const focusOn = !!(editorSettings && editorSettings.focusCurrentParagraph)
     const focusParagraphExt = useFocusParagraphExt(focusOn, content)
     const typewriterOn = !!(editorSettings && editorSettings.typewriterScrolling)
