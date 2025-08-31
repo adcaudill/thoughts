@@ -18,9 +18,9 @@ export type EditorHandle = {
     isDirty: () => boolean
 }
 
-type EditorProps = { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean; editorSettings?: any }
+type EditorProps = { editingNote?: any; onSaved?: (createdId?: string) => void; onDeleted?: () => void; onDirtyChange?: (id: string, dirty: boolean) => void; focusMode?: boolean; editorSettings?: any; layout?: 'panel' | 'immersive' }
 
-const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode, editorSettings }, ref) {
+const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ editingNote, onSaved, onDeleted, onDirtyChange, focusMode, editorSettings, layout = 'panel' }, ref) {
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
@@ -325,7 +325,19 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
     const focusParagraphExt = useFocusParagraphExt(!!(editorSettings && editorSettings.focusCurrentParagraph), content)
 
-    const containerClass = `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
+    const containerClass = layout === 'immersive'
+        ? 'h-full flex flex-col px-6 md:px-10 py-6'
+        : `${focusMode ? 'focus-editor bg-white/90 dark:bg-slate-900/60 rounded-xl shadow-sm ring-1 ring-slate-900/5' : 'bg-white rounded shadow'} p-4 md:p-6 min-h-[60vh] md:min-h-[70vh] flex flex-col`
+
+    const wrapperClass = React.useMemo(() => {
+        const base = 'editor-cm-wrapper flex-1 safe-area'
+        const measure = focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''
+        const borders = layout === 'immersive'
+            ? 'border-0 rounded-none'
+            : (focusMode ? 'border border-black/5 dark:border-white/5 rounded overflow-hidden' : 'border border-slate-200 dark:border-slate-800/30 rounded overflow-hidden')
+        const focusCls = editorSettings && editorSettings.focusCurrentParagraph ? 'cm-focus-current' : ''
+        return [base, borders, focusCls, measure].filter(Boolean).join(' ')
+    }, [layout, focusMode, editorSettings])
 
     return (
         <div className={containerClass}>
@@ -370,8 +382,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                 readingDifficulty={readingDifficulty}
             />
 
-            <div className="mt-2 flex-1 min-h-[40vh] flex flex-col">
-                <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={`${focusMode ? 'border border-black/5 dark:border-white/5' : 'border border-slate-200 dark:border-slate-800/30'} rounded overflow-hidden editor-cm-wrapper flex-1 safe-area ${editorSettings && editorSettings.focusCurrentParagraph ? 'cm-focus-current' : ''} ${focusMode ? 'max-w-3xl md:max-w-4xl mx-auto w-full' : ''}`}>
+            <div className={`mt-2 flex-1 flex flex-col ${layout === 'immersive' ? 'min-h-0' : 'min-h-[40vh]'}`}>
+                <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={wrapperClass}>
                     <CodeMirror
                         value={content}
                         height="100%"

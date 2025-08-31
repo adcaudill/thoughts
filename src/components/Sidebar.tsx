@@ -264,10 +264,10 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     }
 
     return (
-        <div className="bg-white rounded shadow p-3 flex flex-col items-stretch max-h-[80vh] overflow-auto">
+        <div className="p-1 flex flex-col items-stretch max-h-full overflow-auto">
             {!collapsed ? (
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-medium">Folders</h2>
+                <div className="flex items-center justify-between mb-2 px-2">
+                    <h2 className="font-medium text-sm tracking-wide text-slate-600">Folders</h2>
                     <button onClick={() => onToggle && onToggle()} className="text-sm text-slate-500 p-1" aria-label="Toggle sidebar">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M3 12h18"></path>
@@ -279,7 +279,7 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
             ) : null}
 
             {!collapsed ? (
-                <div>
+                <div className="px-1">
                     {error && <div className="text-xs text-red-500 mb-2">{error}</div>}
                     {folders === null ? (
                         <div className="text-sm text-slate-500">Loading…</div>
@@ -287,19 +287,19 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                         <div>
                             <div className="mb-2">
                                 <div className="relative">
-                                    <input aria-label="new-folder-name" placeholder="New folder name" className="border dark:border-slate-800/30 px-3 py-2 text-sm pr-12 w-full min-w-0 rounded" id="new-folder-input" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={async (e) => {
+                                    <input aria-label="new-folder-name" placeholder="New folder name" className="border dark:border-slate-800/30 px-2 py-1.5 text-sm pr-10 w-full min-w-0 rounded" id="new-folder-input" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={async (e) => {
                                         if (e.key === 'Enter') {
                                             e.preventDefault()
                                             await createNewFolder()
                                         }
                                     }} />
-                                    <button aria-label="create-folder" className="absolute right-2 top-1/2 -translate-y-1/2 bg-slate-800 text-white px-3 py-1 text-sm rounded flex items-center justify-center disabled:opacity-50" disabled={newFolderName.trim() === ''} onClick={createNewFolder}>
+                                    <button aria-label="create-folder" className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-slate-800 text-white px-2 py-1 text-xs rounded flex items-center justify-center disabled:opacity-50" disabled={newFolderName.trim() === ''} onClick={createNewFolder}>
                                         <i className="fa-solid fa-plus" aria-hidden="true"></i>
                                         <span className="sr-only">Create</span>
                                     </button>
                                 </div>
                             </div>
-                            <ul className="space-y-2 text-sm text-slate-700">
+                            <ul className="space-y-1.5 text-sm text-slate-700">
                                 {tree.length === 0 ? <li className="py-1 px-2 text-slate-500">No folders</li> : tree.map(n => renderNode(n))}
                             </ul>
                         </div>

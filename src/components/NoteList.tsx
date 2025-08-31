@@ -57,14 +57,14 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
     }
 
     return (
-        <div className="bg-white rounded shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium">Notes</h3>
-                <button className="text-sm text-slate-700 px-2 py-1 rounded hover:bg-slate-50" onClick={() => onSelect({ id: '', title: '', content: '' })} aria-label="new-note">+ New</button>
+        <div className="p-2">
+            <div className="flex items-center justify-between mb-2 px-1">
+                <h3 className="font-medium text-sm tracking-wide text-slate-600">Notes</h3>
+                <button className="text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100" onClick={() => onSelect({ id: '', title: '', content: '' })} aria-label="new-note">+ New</button>
             </div>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-1 text-sm">
                 {notes.map(n => (
-                    <li key={n.id} className="py-1 px-2 rounded hover:bg-slate-50 cursor-pointer flex items-center justify-between" onClick={() => loadAndSelect(n.id)}>
+                    <li key={n.id} className="py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between" onClick={() => loadAndSelect(n.id)}>
                         <span className="flex items-center gap-2">
                             <span>{n.title}</span>
                         </span>

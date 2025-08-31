@@ -117,111 +117,119 @@ export default function App() {
     }, [focusMode])
 
     return (
-        <div className={`min-h-screen ${focusMode ? 'bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950' : 'bg-gray-50'} text-slate-900 safe-area`}>
-            <header className={`${focusMode ? 'fixed top-0 left-0 right-0 z-20 transition-all duration-300 ' + (zenHeaderVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none') : ''} p-6 max-w-6xl mx-auto flex items-start justify-between ${focusMode ? 'bg-white/80 dark:bg-slate-900/60 backdrop-blur' : ''}`}>
-                <div>
-                    <h1 className="text-3xl font-semibold">thoughts</h1>
-                    <p className="text-sm text-slate-500">private, end-to-end encrypted notes</p>
-                </div>
-                <nav>
-                    <div className="flex items-center gap-2">
-                        {authed && (
-                            <button
-                                className={`px-3 py-1 rounded border text-sm ${focusMode ? 'bg-slate-900 text-white border-slate-900' : ''}`}
-                                onClick={() => setFocusMode(v => !v)}
-                                aria-pressed={focusMode}
-                                aria-label="Toggle focus mode"
-                            >{focusMode ? 'Exit focus' : 'Focus'}</button>
-                        )}
-                        {authed && (
-                            <button className={`px-3 py-1 rounded border text-sm ${focusMode ? 'bg-slate-900 text-white border-slate-900' : ''}`} onClick={() => setSettingsOpen(true)}>Settings</button>
-                        )}
-                        {!authed && (
-                            <>
-                                <button className="px-3 py-1 rounded border" onClick={async () => {
-                                    // try to fast-path to the authed state if we have a stored note key and the server session is valid
-                                    try {
-                                        loadSessionFromStorage()
-                                        const noteKey = getNoteKey()
-                                        if (noteKey) {
-                                            const res = await getFolders()
-                                            if (res && res.ok) {
-                                                setAuthed(true)
-                                                return
-                                            }
+        <div className={`h-screen w-screen ${focusMode ? 'bg-white dark:bg-slate-950' : 'bg-white dark:bg-slate-950'} text-slate-900 dark:text-slate-100 safe-area overflow-hidden`}>
+            {/* When logged out, keep a minimal landing with auth controls */}
+            {!authed ? (
+                <div className="h-full w-full flex flex-col">
+                    <div className="p-6 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+                        <div>
+                            <h1 className="text-2xl font-semibold">thoughts</h1>
+                            <p className="text-sm text-slate-500">private, end-to-end encrypted notes</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button className="px-3 py-1 rounded border" onClick={async () => {
+                                try {
+                                    loadSessionFromStorage()
+                                    const noteKey = getNoteKey()
+                                    if (noteKey) {
+                                        const res = await getFolders()
+                                        if (res && res.ok) {
+                                            setAuthed(true)
+                                            return
                                         }
-                                    } catch {
-                                        // ignore and fall through to show login
                                     }
-                                    setShowingAuth('login')
-                                }}>login</button>
-                                <button className="px-3 py-1 rounded bg-slate-800 text-white" onClick={() => setShowingAuth('register')}>register</button>
-                            </>
+                                } catch { }
+                                setShowingAuth('login')
+                            }}>login</button>
+                            <button className="px-3 py-1 rounded bg-slate-800 text-white" onClick={() => setShowingAuth('register')}>register</button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-auto p-6">
+                        {showingAuth === 'none' ? (
+                            <Landing />
+                        ) : (
+                            <Auth initialMode={showingAuth} onCancel={() => setShowingAuth('none')} onAuth={() => setAuthed(true)} />
                         )}
                     </div>
-                </nav>
-            </header>
-
-            <main className={`max-w-6xl mx-auto p-6 ${focusMode ? 'pt-24' : ''}`}>
-                {!authed ? (
-                    showingAuth === 'none' ? (
-                        <Landing />
-                    ) : (
-                        <Auth initialMode={showingAuth} onCancel={() => setShowingAuth('none')} onAuth={() => setAuthed(true)} />
-                    )
-                ) : (
-                    <div className={focusMode ? 'flex justify-center' : 'flex flex-col sm:flex-row gap-6'}>
-                        {!focusMode && (
-                            <aside className={collapsed ? 'w-12' : 'w-full sm:w-64'}>
-                                <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id); }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined); }} />
-                                {!collapsed && <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={async (note: any) => {
-                                    try {
-                                        if (editorRef.current && editorRef.current.isDirty && editorRef.current.isDirty()) {
-                                            await editorRef.current.save()
-                                        }
-                                    } catch {
-                                        // ignore save errors for now but proceed to switch
-                                    }
-                                    setEditingNote(note)
-                                    if (note.folder_id) setSelectedFolder(note.folder_id)
-                                }} refreshSignal={refreshSignal} />}
-                            </aside>
-                        )}
-
-                        <section className={focusMode ? 'w-full max-w-4xl' : 'flex-1'}>
-                            <div className="grid grid-cols-1 gap-6">
-                                <div className="col-span-1">
-                                    <Editor
-                                        ref={editorRef}
-                                        editorSettings={settings}
-                                        focusMode={focusMode}
-                                        editingNote={editingNote}
-                                        onSaved={(createdId?: string) => {
-                                            // Refresh note list, but do NOT clear the editor state.
-                                            setRefreshSignal(v => v + 1)
-                                            // If the editor created a new note, attach the created id to the
-                                            // existing editingNote so subsequent saves patch instead of creating.
-                                            if (createdId) {
-                                                setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
-                                            }
-                                        }}
-                                        onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined); }}
-                                        onDirtyChange={(id: string, dirty: boolean) => {
-                                            setDirtyNoteIds(prev => {
-                                                const next = { ...prev }
-                                                if (!id) return next
-                                                if (dirty) next[id] = true
-                                                else delete next[id]
-                                                return next
-                                            })
-                                        }}
-                                    />
+                </div>
+            ) : (
+                <div className="h-full w-full flex overflow-hidden">
+                    {/* Left rail sidebar */}
+                    {!focusMode && (
+                        <aside className={`${collapsed ? 'w-14 w-12' : 'w-72'} shrink-0 h-full border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden`}>
+                            <div className="h-full flex flex-col">
+                                <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                    <button onClick={() => setCollapsed(c => !c)} aria-label="Toggle sidebar" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 p-2 rounded">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M3 12h18"></path>
+                                            <path d="M3 6h18"></path>
+                                            <path d="M3 18h18"></path>
+                                        </svg>
+                                    </button>
+                                    {!collapsed && (
+                                        <div className="flex items-center gap-2">
+                                            <button className="text-sm text-slate-600 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setSettingsOpen(true)}>Settings</button>
+                                            <button
+                                                className="text-sm px-2 py-1 rounded border border-slate-300 dark:border-slate-700"
+                                                onClick={() => setFocusMode(v => !v)}
+                                                aria-pressed={focusMode}
+                                                aria-label="Toggle focus mode"
+                                            >Focus</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 overflow-auto px-3 py-3">
+                                    <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id) }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined) }} />
+                                    {!collapsed && (
+                                        <div className="mt-4">
+                                            <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={async (note: any) => {
+                                                try {
+                                                    if (editorRef.current && editorRef.current.isDirty && editorRef.current.isDirty()) {
+                                                        await editorRef.current.save()
+                                                    }
+                                                } catch { }
+                                                setEditingNote(note)
+                                                if (note.folder_id) setSelectedFolder(note.folder_id)
+                                            }} refreshSignal={refreshSignal} />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                        </section>
-                    </div>
-                )}
-            </main>
+                        </aside>
+                    )}
+
+                    {/* Main writing pane */}
+                    <section className={`flex-1 h-full flex ${focusMode ? 'justify-center' : ''} overflow-hidden`}>
+                        <div className={`${focusMode ? 'w-full max-w-4xl' : 'w-full'} h-full flex flex-col min-h-0 overflow-hidden`}>
+                            <div className="flex-1 min-h-0">
+                                <Editor
+                                    ref={editorRef}
+                                    editorSettings={settings}
+                                    focusMode={focusMode}
+                                    editingNote={editingNote}
+                                    onSaved={(createdId?: string) => {
+                                        setRefreshSignal(v => v + 1)
+                                        if (createdId) {
+                                            setEditingNote((prev: any) => prev ? { ...prev, id: createdId } : prev)
+                                        }
+                                    }}
+                                    onDeleted={() => { setRefreshSignal(v => v + 1); setEditingNote(undefined); setSelectedNote(undefined) }}
+                                    onDirtyChange={(id: string, dirty: boolean) => {
+                                        setDirtyNoteIds(prev => {
+                                            const next = { ...prev }
+                                            if (!id) return next
+                                            if (dirty) next[id] = true
+                                            else delete next[id]
+                                            return next
+                                        })
+                                    }}
+                                    layout="immersive"
+                                />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            )}
             <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={(s) => setSettings(s)} />
         </div>
     )
