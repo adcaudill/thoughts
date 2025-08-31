@@ -1,8 +1,11 @@
-/* Centered, full-height editor with ~90ch text measure and focus/issue decorations */
-
-.editor-cm-wrapper,
+/* Centered editor. Let the wrapper flex; only CodeMirror fills the wrapper. */
 .cm-editor {
     height: 100%;
+}
+
+.editor-cm-wrapper {
+    min-height: 0;
+    /* allow flex child to shrink so the status bar remains visible */
 }
 
 /* Limit content measure to about 90 characters, keep centered */
@@ -21,6 +24,9 @@
 .cm-editor .cm-scroller {
     overflow: auto;
     padding: 1.25rem 1rem;
+    /* top/right/left */
+    padding-bottom: calc(1.25rem + 5rem);
+    /* reserve space so sticky status bar never overlaps last lines */
 }
 
 .cm-editor .cm-content {

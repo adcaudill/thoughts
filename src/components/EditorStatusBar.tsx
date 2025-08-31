@@ -14,7 +14,7 @@ type Props = {
 
 export default function EditorStatusBar({ editorSettings, words, readingTimeMin, readingDifficulty, fleschScore, loading, lastSavedAt, dirty, onSave }: Props) {
     return (
-        <div className="mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-between">
+        <div className="editor-statusbar mt-3 sm:mt-4 flex-none flex items-center gap-4 justify-between sticky bottom-0 z-20 bg-white/95 dark:bg-slate-950/90 backdrop-blur border-t border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-4">
                 {editorSettings && (editorSettings.showWordCount || editorSettings.showReadingTime) && (
                     <div className="text-sm text-slate-500 dark:text-slate-300 flex items-center gap-3">
