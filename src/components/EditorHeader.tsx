@@ -10,9 +10,10 @@ type Props = {
     folders: Array<any>
     onDelete: () => void
     onOpenNoteInfo?: () => void
+    onOpenHistory?: () => void
 }
 
-export default function EditorHeader({ title, titleRef, onTitleChange, focusMode, selectedFolder, onFolderSelect, folders, onDelete, onOpenNoteInfo }: Props) {
+export default function EditorHeader({ title, titleRef, onTitleChange, focusMode, selectedFolder, onFolderSelect, folders, onDelete, onOpenNoteInfo, onOpenHistory }: Props) {
     const [menuOpen, setMenuOpen] = React.useState(false)
     const menuRef = React.useRef<HTMLDivElement | null>(null)
     const toggleRef = React.useRef<HTMLButtonElement | null>(null)
@@ -119,6 +120,14 @@ export default function EditorHeader({ title, titleRef, onTitleChange, focusMode
                             >
                                 <i className="fa-solid fa-circle-info mr-2" aria-hidden="true" />
                                 <span className="font-medium">Note information</span>
+                            </button>
+                            <button
+                                role="menuitem"
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-700"
+                                onClick={() => { setMenuOpen(false); onOpenHistory && onOpenHistory() }}
+                            >
+                                <i className="fa-solid fa-clock-rotate-left mr-2" aria-hidden="true" />
+                                <span className="font-medium">History</span>
                             </button>
                             <button
                                 role="menuitem"

@@ -167,6 +167,32 @@ export async function flushOutboxOnce() {
                 } catch {
                     // leave for retry
                 }
+            } else if (item.type === 'note.softDelete') {
+                const { id } = item.payload as { id: string }
+                try {
+                    const res = await api.deleteNote(id)
+                    if (res && res.ok) {
+                        const n = await tx.objectStore('notes').get(id)
+                        if (n) {
+                            n.deleted_at = new Date().toISOString()
+                            await tx.objectStore('notes').put(n)
+                        }
+                        await tx.objectStore('outbox').delete(item.id as any)
+                    }
+                } catch { /* leave for retry */ }
+            } else if (item.type === 'note.restore') {
+                const { id } = item.payload as { id: string }
+                try {
+                    const res = await api.restoreNote(id)
+                    if (res && res.ok) {
+                        const n = await tx.objectStore('notes').get(id)
+                        if (n) {
+                            n.deleted_at = null
+                            await tx.objectStore('notes').put(n)
+                        }
+                        await tx.objectStore('outbox').delete(item.id as any)
+                    }
+                } catch { /* leave for retry */ }
             }
         } catch (e) {
             // leave item in outbox for retry

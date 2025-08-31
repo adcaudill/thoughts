@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 // Provide global vi for tests if not present (vitest provides it automatically)
 if (typeof (globalThis as any).vi === 'undefined') {

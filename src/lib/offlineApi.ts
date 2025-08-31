@@ -12,19 +12,24 @@ function now() { return Date.now() }
 
 type GetNotesResponse = any
 
-export async function getNotes(folderId?: string): Promise<GetNotesResponse> {
+export async function getNotes(folderId?: string, opts?: { trashed?: boolean }): Promise<GetNotesResponse> {
     const db = await getDB()
     // Return cached notes immediately
     const tx = db.transaction('notes')
     const store = tx.objectStore('notes')
     const idx = folderId ? store.index('by-folder') : null
-    const cached = folderId ? await idx!.getAll(folderId) : await store.getAll()
+    let cached = folderId ? await idx!.getAll(folderId) : await store.getAll()
+    if (!opts || !opts.trashed) {
+        cached = (cached as any[]).filter((n: any) => !n.deleted_at)
+    } else {
+        cached = (cached as any[]).filter((n: any) => !!n.deleted_at)
+    }
     const local = { ok: true, notes: cached }
 
         // Fire and forget background refresh
         ; (async () => {
             try {
-                const remote = await api.getNotes(folderId)
+                const remote = await api.getNotes({ folderId, trashed: !!(opts && opts.trashed) })
                 if (remote && remote.ok && Array.isArray(remote.notes)) {
                     const txw = (await getDB()).transaction(['notes'], 'readwrite')
                     const nstore = txw.objectStore('notes')
@@ -41,6 +46,7 @@ export async function getNotes(folderId?: string): Promise<GetNotesResponse> {
                             server_updated_at: merged.server_updated_at || null,
                             locally_edited_at: ex?.locally_edited_at || null,
                             dirty: !!ex?.dirty,
+                            deleted_at: merged.deleted_at || null,
                         })
                     }
                     await txw.done
@@ -78,6 +84,59 @@ export async function updateNote(id: string, patch: any) {
         const base = current?.server_updated_at || null
         await upsertLocalNoteFromPayload({ id, ...patch }, { dirty: true, locally_edited_at: now() })
         await enqueue('note.update', { id, patch }, base)
+        return { ok: true, offline: true }
+    }
+}
+
+export async function deleteNote(id: string): Promise<{ ok: boolean; offline?: true }> {
+    try {
+        const res = await api.deleteNote(id)
+        if (res && res.ok) {
+            const db = await getDB()
+            const n = await db.get('notes', id)
+            if (n) {
+                n.deleted_at = new Date().toISOString()
+                await db.put('notes', n)
+            }
+            try { const { deleteIndexDoc } = await import('./search'); deleteIndexDoc(id) } catch { }
+            try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
+        }
+        return res
+    } catch {
+        const db = await getDB()
+        const n = await db.get('notes', id)
+        if (n) { n.deleted_at = new Date().toISOString(); await db.put('notes', n) }
+        await enqueue('note.softDelete', { id }, null)
+        try { const { deleteIndexDoc } = await import('./search'); deleteIndexDoc(id) } catch { }
+        try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
+        return { ok: true, offline: true }
+    }
+}
+
+export async function restoreNote(id: string): Promise<{ ok: boolean; offline?: true }> {
+    try {
+        const res = await api.restoreNote(id)
+        if (res && res.ok) {
+            const db = await getDB()
+            const n = await db.get('notes', id)
+            if (n) { n.deleted_at = null; await db.put('notes', n) }
+            try {
+                const key = getNoteKey()
+                if (key && n && n.content_encrypted && n.nonce) {
+                    const { upsertIndexDoc, persistIndex } = await import('./search')
+                    await upsertIndexDoc(key, { id, content_encrypted: n.content_encrypted, nonce: n.nonce })
+                    await persistIndex(key)
+                }
+            } catch { }
+            try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
+        }
+        return res
+    } catch {
+        const db = await getDB()
+        const n = await db.get('notes', id)
+        if (n) { n.deleted_at = null; await db.put('notes', n) }
+        await enqueue('note.restore', { id }, null)
+        try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
         return { ok: true, offline: true }
     }
 }

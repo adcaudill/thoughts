@@ -13,6 +13,7 @@ export interface ThoughtsDB extends DBSchema {
             server_updated_at?: string | null
             locally_edited_at?: number | null
             dirty?: boolean
+            deleted_at?: string | null
         }
         indexes: { 'by-folder': string; 'by-dirty': string }
     }

@@ -10,9 +10,10 @@ import { useTypewriterScrollExt } from '../hooks/useTypewriterScrollExt'
 import EditorHeader from './EditorHeader'
 import EditorStatusBar from './EditorStatusBar'
 import NoteInfoDialog from './NoteInfoDialog'
+import NoteHistoryDialog from './NoteHistoryDialog'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
-import { createNote, updateNote } from '../lib/offlineApi'
+import { createNote, updateNote, deleteNote as deleteNoteOffline } from '../lib/offlineApi'
 import { getFolders } from '../lib/api'
 
 export type EditorHandle = {
@@ -234,7 +235,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     async function handleDelete() {
         if (!editingNote || !editingNote.id) return
         setLoading(true)
-        await fetch(`/api/notes/${editingNote.id}`, { method: 'DELETE', credentials: 'same-origin' })
+        try { await deleteNoteOffline(editingNote.id) } catch { }
         setLoading(false)
         onDeleted?.()
     }
@@ -355,6 +356,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
     const { words, readingTimeMin, readingDifficulty, fleschScore, sentences, syllables, characters, fleschKincaid, automatedReadabilityIndex } = useReadingStats(content, !!(editorSettings && editorSettings.showReadingTime))
     const [noteInfoOpen, setNoteInfoOpen] = useState(false)
+    const [historyOpen, setHistoryOpen] = useState(false)
 
     const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content, (editorSettings && editorSettings.styleCheckOptions) || undefined)
     const focusOn = !!(editorSettings && editorSettings.focusCurrentParagraph)
@@ -405,6 +407,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                 folders={folders}
                 onDelete={() => handleDelete()}
                 onOpenNoteInfo={() => setNoteInfoOpen(true)}
+                onOpenHistory={() => setHistoryOpen(true)}
             />
 
             <NoteInfoDialog
@@ -420,6 +423,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                 readingTimeMin={readingTimeMin}
                 readingDifficulty={readingDifficulty}
             />
+
+            <NoteHistoryDialog open={historyOpen} noteId={stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || undefined} onClose={() => setHistoryOpen(false)} />
 
             <div className={`mt-2 flex-1 flex flex-col ${layout === 'immersive' ? 'min-h-0' : 'min-h-[40vh]'}`}>
                 <div ref={wrapperRef} style={{ fontFamily: computeFontFamily() }} className={wrapperClass}>

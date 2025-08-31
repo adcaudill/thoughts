@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Sidebar from './components/Sidebar'
+import Trash from './components/Trash'
 import Editor, { EditorHandle } from './components/Editor'
 import NoteList from './components/NoteList'
 import Auth from './components/Auth'
@@ -21,6 +22,7 @@ export default function App() {
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settings, setSettings] = useState<any>({ editorFont: 'mono:jetbrains', showWordCount: false, showReadingTime: false, focusCurrentParagraph: false, styleIssues: false, typewriterScrolling: false })
     const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
+    const [showTrash, setShowTrash] = useState(false)
     const hideTimerRef = React.useRef<number | null>(null)
     const editorRef = React.useRef<EditorHandle | null>(null)
 
@@ -169,6 +171,7 @@ export default function App() {
                                     {!collapsed && (
                                         <div className="flex items-center gap-2">
                                             <button className="text-sm text-slate-600 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setSettingsOpen(true)}>Settings</button>
+                                            <button className="text-sm text-slate-600 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setShowTrash(true)}>Trash</button>
                                             <button
                                                 className="text-sm px-2 py-1 rounded border border-slate-300 dark:border-slate-700"
                                                 onClick={() => setFocusMode(v => !v)}
@@ -179,7 +182,11 @@ export default function App() {
                                     )}
                                 </div>
                                 <div className="flex-1 overflow-auto px-3 py-3">
-                                    <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id) }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined) }} />
+                                    {!showTrash ? (
+                                        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id) }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined) }} />
+                                    ) : (
+                                        <Trash onClose={() => setShowTrash(false)} />
+                                    )}
                                     {!collapsed && (
                                         <div className="mt-4">
                                             <NoteList folderId={selectedFolder} dirtyNoteIds={dirtyNoteIds} onSelect={async (note: any) => {

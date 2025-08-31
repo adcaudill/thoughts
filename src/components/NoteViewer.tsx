@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { getNoteKey } from '../lib/session'
 import { decryptNotePayload } from '../lib/crypto'
 import ReactMarkdown from 'react-markdown'
+import { deleteNote as deleteNoteOffline } from '../lib/offlineApi'
 
 export default function NoteViewer({ id, onEdit, onDeleted }: { id?: string; onEdit?: (note: any) => void; onDeleted?: () => void }) {
     const [note, setNote] = useState<any | null>(null)
@@ -42,9 +43,9 @@ export default function NoteViewer({ id, onEdit, onDeleted }: { id?: string; onE
                 <div className="flex gap-2">
                     <button className="text-sm px-3 py-1 border dark:border-slate-800/30 rounded" onClick={() => onEdit && onEdit({ id, title: note.title, content: note.content })}>Edit</button>
                     <button className="text-sm px-3 py-1 bg-red-600 text-white rounded" onClick={async () => {
-                        await fetch(`/api/notes/${id}`, { method: 'DELETE', credentials: 'same-origin' })
+                        await deleteNoteOffline(id!)
                         if (onDeleted) onDeleted()
-                    }}>Delete</button>
+                    }}>Move to Trash</button>
                 </div>
             </div>
             <div className="prose max-w-3xl">

@@ -137,11 +137,20 @@ router.get('/api/notes', async request => {
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
     const url = new URL(request.url)
     const folderId = url.searchParams.get('folderId')
+    const trashed = url.searchParams.get('trashed') === '1' || url.searchParams.get('trashed') === 'true'
     let res
     if (folderId) {
-        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ? AND folder_id = ?').bind(userId, folderId).all()
+        if (trashed) {
+            res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at FROM notes WHERE user_id = ? AND folder_id = ? AND deleted_at IS NOT NULL').bind(userId, folderId).all()
+        } else {
+            res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at FROM notes WHERE user_id = ? AND folder_id = ? AND deleted_at IS NULL').bind(userId, folderId).all()
+        }
     } else {
-        res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE user_id = ?').bind(userId).all()
+        if (trashed) {
+            res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL').bind(userId).all()
+        } else {
+            res = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at FROM notes WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all()
+        }
     }
     return new Response(JSON.stringify({ ok: true, notes: res.results || [] }), { status: 200 })
 })
@@ -152,7 +161,7 @@ router.get('/api/notes/:id', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
     const { id } = request.params as any
-    const note = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
+    const note = await db.prepare('SELECT id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
     if (!note) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
     return new Response(JSON.stringify({ ok: true, note }), { status: 200 })
 })
@@ -183,7 +192,7 @@ router.post('/api/notes', async request => {
     const id = (body && body.id) ? String(body.id) : uuidv4()
     const now = new Date().toISOString()
     try {
-        await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        await db.prepare('INSERT INTO notes (id, user_id, folder_id, title_encrypted, content_encrypted, nonce, created_at, updated_at, word_count, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)')
             .bind(id, userId, folderId, body.title_encrypted || null, body.content_encrypted, body.nonce || null, now, now, body.word_count ?? 0)
             .run()
     } catch {
@@ -212,17 +221,27 @@ router.patch('/api/notes/:id', async request => {
     const updates: string[] = []
     const values: any[] = []
     if (body.title_encrypted !== undefined) { updates.push('title_encrypted = ?'); values.push(body.title_encrypted) }
+    const contentChanging = body.content_encrypted !== undefined || body.nonce !== undefined
     if (body.content_encrypted !== undefined) { updates.push('content_encrypted = ?'); values.push(body.content_encrypted) }
     if (body.nonce !== undefined) { updates.push('nonce = ?'); values.push(body.nonce) }
     if (body.folder_id !== undefined) { updates.push('folder_id = ?'); values.push(body.folder_id) }
     if (body.word_count !== undefined) { updates.push('word_count = ?'); values.push(body.word_count) }
 
     if (updates.length === 0) return new Response(JSON.stringify({ ok: false, error: 'nothing to update' }), { status: 400 })
-    values.push(new Date().toISOString())
+    const updatedAt = new Date().toISOString()
+    values.push(updatedAt)
     updates.push('updated_at = ?')
     values.push(id)
+    // If content changes, create a version snapshot first (with new ciphertext)
+    if (contentChanging && (body.content_encrypted || body.nonce)) {
+        try {
+            await db.prepare('INSERT INTO note_versions (id, user_id, note_id, content_encrypted, nonce, title_encrypted, word_count, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(uuidv4(), userId, id, body.content_encrypted || null, body.nonce || null, body.title_encrypted || null, body.word_count ?? null, body.reason || 'autosave')
+                .run()
+        } catch { /* ignore version insert errors */ }
+    }
     await db.prepare(`UPDATE notes SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run()
-    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    return new Response(JSON.stringify({ ok: true, updated_at: updatedAt }), { status: 200 })
 })
 
 router.delete('/api/notes/:id', async request => {
@@ -231,10 +250,82 @@ router.delete('/api/notes/:id', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
     const { id } = request.params as any
+    const url = new URL(request.url)
+    const purge = url.searchParams.get('purge') === '1' || url.searchParams.get('purge') === 'true'
     const note = await db.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
     if (!note) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
-    await db.prepare('DELETE FROM notes WHERE id = ?').bind(id).run()
+    if (purge) {
+        try { await db.prepare('DELETE FROM note_versions WHERE note_id = ?').bind(id).run() } catch { /* ignore if table missing */ }
+        await db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).run()
+        return new Response(JSON.stringify({ ok: true, purged: true }), { status: 200 })
+    }
+    await db.prepare('UPDATE notes SET deleted_at = ? WHERE id = ?').bind(new Date().toISOString(), id).run()
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
+})
+
+// Restore a soft-deleted note
+router.patch('/api/notes/:id/restore', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const { id } = request.params as any
+    const note = await db.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
+    if (!note) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
+    await db.prepare('UPDATE notes SET deleted_at = NULL WHERE id = ?').bind(id).run()
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+})
+
+// Versions list
+router.get('/api/notes/:id/versions', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const { id } = request.params as any
+    // ensure note belongs to user
+    const note = await db.prepare('SELECT id FROM notes WHERE id = ? AND user_id = ?').bind(id, userId).first()
+    if (!note) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
+    const res = await db.prepare('SELECT id, created_at, word_count, reason FROM note_versions WHERE note_id = ? ORDER BY created_at DESC').bind(id).all()
+    return new Response(JSON.stringify({ ok: true, versions: res.results || [] }), { status: 200 })
+})
+
+// Get a specific version content
+router.get('/api/notes/:id/versions/:versionId', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const { id, versionId } = request.params as any
+    // join to validate ownership
+    const row = await db.prepare('SELECT v.id, v.content_encrypted, v.nonce, v.title_encrypted, v.word_count, v.created_at FROM note_versions v JOIN notes n ON n.id = v.note_id WHERE v.id = ? AND v.note_id = ? AND n.user_id = ?').bind(versionId, id, userId).first()
+    if (!row) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
+    return new Response(JSON.stringify({ ok: true, version: row }), { status: 200 })
+})
+
+// Restore a specific version (sets note content to version snapshot and creates a new version entry)
+router.post('/api/notes/:id/restore-version', async request => {
+    const env = (request as any).env as any
+    const db = env && env.DB
+    const userId = await verifyJwtAndGetSub(request, env)
+    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
+    const { id } = request.params as any
+    const body = await readJson(request)
+    const versionId = body && body.version_id
+    if (!versionId) return new Response(JSON.stringify({ ok: false, error: 'missing version_id' }), { status: 400 })
+    const v = await db.prepare('SELECT v.content_encrypted, v.nonce, v.title_encrypted, v.word_count FROM note_versions v JOIN notes n ON n.id = v.note_id WHERE v.id = ? AND v.note_id = ? AND n.user_id = ?').bind(versionId, id, userId).first()
+    if (!v) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 })
+    const now = new Date().toISOString()
+    // Create a new version entry representing the restore point
+    try {
+        await db.prepare('INSERT INTO note_versions (id, user_id, note_id, content_encrypted, nonce, title_encrypted, word_count, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(uuidv4(), userId, id, v.content_encrypted, v.nonce, v.title_encrypted || null, v.word_count ?? null, 'restore')
+            .run()
+    } catch { }
+    await db.prepare('UPDATE notes SET content_encrypted = ?, nonce = ?, title_encrypted = ?, word_count = ?, updated_at = ?, deleted_at = NULL WHERE id = ? AND user_id = ?')
+        .bind(v.content_encrypted, v.nonce, v.title_encrypted || null, v.word_count ?? 0, now, id, userId)
+        .run()
+    return new Response(JSON.stringify({ ok: true, updated_at: now }), { status: 200 })
 })
 
 // User settings: stored as JSON string in users.settings
@@ -367,7 +458,7 @@ router.get('/api/folder-stats', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
     const res = await db.prepare(
-        'SELECT folder_id as id, SUM(word_count) as total_words FROM notes WHERE user_id = ? GROUP BY folder_id'
+        'SELECT folder_id as id, SUM(word_count) as total_words FROM notes WHERE user_id = ? AND deleted_at IS NULL GROUP BY folder_id'
     ).bind(userId).all()
     const results = (res.results || []).map((r: any) => ({ id: r.id, total_words: Number(r.total_words || 0) }))
     return new Response(JSON.stringify({ ok: true, stats: results }), { status: 200 })

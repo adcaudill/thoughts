@@ -15,7 +15,7 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
 
     useEffect(() => {
         async function load() {
-            const res = await getNotes(folderId)
+            const res = await getNotes(folderId, { trashed: false })
             if (!res.ok) return
             const key = getNoteKey()
             const items: Array<NoteSummary> = []

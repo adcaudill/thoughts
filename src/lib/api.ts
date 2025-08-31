@@ -38,8 +38,11 @@ export async function deleteFolder(id: string) {
     return res.json()
 }
 
-export async function getNotes(folderId?: string) {
-    const qs = folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''
+export async function getNotes(opts?: { folderId?: string; trashed?: boolean }) {
+    const p = new URLSearchParams()
+    if (opts && opts.folderId) p.set('folderId', opts.folderId)
+    if (opts && opts.trashed) p.set('trashed', '1')
+    const qs = p.toString() ? `?${p.toString()}` : ''
     const res = await fetch(`/api/notes${qs}`, { credentials: 'same-origin' })
     return res.json()
 }
@@ -61,6 +64,26 @@ export async function updateNote(id: string, payload: { title_encrypted?: string
 
 export async function deleteNote(id: string) {
     const res = await fetch(`/api/notes/${id}`, { method: 'DELETE', credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function restoreNote(id: string) {
+    const res = await fetch(`/api/notes/${id}/restore`, { method: 'PATCH', credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function listNoteVersions(id: string) {
+    const res = await fetch(`/api/notes/${id}/versions`, { credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function getNoteVersion(id: string, versionId: string) {
+    const res = await fetch(`/api/notes/${id}/versions/${versionId}`, { credentials: 'same-origin' })
+    return res.json()
+}
+
+export async function restoreNoteVersion(id: string, versionId: string) {
+    const res = await fetch(`/api/notes/${id}/restore-version`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version_id: versionId }), credentials: 'same-origin' })
     return res.json()
 }
 

@@ -73,3 +73,8 @@ export async function upsertIndexDoc(noteKeyB64: string, note: { id: string; con
         }
     } catch { /* ignore */ }
 }
+
+export function deleteIndexDoc(id: string) {
+    if (!index) return
+    try { index.remove({ id } as any) } catch { /* ignore */ }
+}
