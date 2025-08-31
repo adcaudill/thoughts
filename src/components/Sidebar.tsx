@@ -266,15 +266,8 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     return (
         <div className="p-1 flex flex-col items-stretch max-h-full overflow-auto">
             {!collapsed ? (
-                <div className="flex items-center justify-between mb-2 px-2">
+                <div className="flex items-center mb-2 px-2">
                     <h2 className="font-medium text-sm tracking-wide text-slate-600">Folders</h2>
-                    <button onClick={() => onToggle && onToggle()} className="text-sm text-slate-500 p-1" aria-label="Toggle sidebar">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 12h18"></path>
-                            <path d="M3 6h18"></path>
-                            <path d="M3 18h18"></path>
-                        </svg>
-                    </button>
                 </div>
             ) : null}
 
@@ -307,13 +300,6 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                 </div>
             ) : (
                 <div className="flex sm:flex-col items-center gap-2 py-2">
-                    <button onClick={() => onToggle && onToggle()} aria-label="Toggle sidebar" className="text-sm text-slate-500 p-3 rounded hover:bg-slate-700/10 w-10 h-10 flex items-center justify-center">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 12h18"></path>
-                            <path d="M3 6h18"></path>
-                            <path d="M3 18h18"></path>
-                        </svg>
-                    </button>
                     <button onClick={() => onCreateNote && onCreateNote()} aria-label="New note" className="text-sm text-slate-500 p-3 rounded hover:bg-slate-700/10 w-10 h-10 flex items-center justify-center">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 5v14"></path>
