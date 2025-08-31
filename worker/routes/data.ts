@@ -241,7 +241,7 @@ router.delete('/api/notes/:id', async request => {
 // Schema is validated server-side to avoid arbitrary data injection.
 function validateSettings(obj: any) {
     if (!obj || typeof obj !== 'object') return { valid: false, error: 'invalid payload' }
-    const allowedKeys = ['editorFont', 'showWordCount', 'showReadingTime', 'focusCurrentParagraph', 'styleIssues']
+    const allowedKeys = ['editorFont', 'showWordCount', 'showReadingTime', 'focusCurrentParagraph', 'styleIssues', 'typewriterScrolling']
     const result: any = {}
     for (const k of Object.keys(obj)) {
         if (!allowedKeys.includes(k)) return { valid: false, error: `unknown setting '${k}'` }
@@ -268,6 +268,10 @@ function validateSettings(obj: any) {
     if (obj.styleIssues !== undefined) {
         if (typeof obj.styleIssues !== 'boolean') return { valid: false, error: 'styleIssues must be boolean' }
         result.styleIssues = obj.styleIssues
+    }
+    if (obj.typewriterScrolling !== undefined) {
+        if (typeof obj.typewriterScrolling !== 'boolean') return { valid: false, error: 'typewriterScrolling must be boolean' }
+        result.typewriterScrolling = obj.typewriterScrolling
     }
     return { valid: true, value: result }
 }

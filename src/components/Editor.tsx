@@ -326,7 +326,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const styleIssuesExt = useStyleIssuesExt(!!(editorSettings && editorSettings.styleIssues), content)
     const focusOn = !!(editorSettings && editorSettings.focusCurrentParagraph)
     const focusParagraphExt = useFocusParagraphExt(focusOn, content)
-    const typewriterOn = focusOn || !!focusMode
+    const typewriterOn = !!(editorSettings && editorSettings.typewriterScrolling)
     const typewriterExt = useTypewriterScrollExt(typewriterOn)
 
     const containerClass = layout === 'immersive'

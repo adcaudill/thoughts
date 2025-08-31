@@ -11,6 +11,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
     const [dirty, setDirty] = useState(false)
     const [focusCurrentParagraph, setFocusCurrentParagraph] = useState(false)
     const [styleIssues, setStyleIssues] = useState(false)
+    const [typewriterScrolling, setTypewriterScrolling] = useState(false)
 
     useEffect(() => {
         if (!open) return
@@ -25,6 +26,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 if (typeof s.showReadingTime === 'boolean') setShowReadingTime(s.showReadingTime)
                 if (typeof s.focusCurrentParagraph === 'boolean') setFocusCurrentParagraph(s.focusCurrentParagraph)
                 if (typeof s.styleIssues === 'boolean') setStyleIssues(s.styleIssues)
+                if (typeof s.typewriterScrolling === 'boolean') setTypewriterScrolling(s.typewriterScrolling)
                 setDirty(false)
             }
         }).finally(() => { if (mounted) setLoading(false) })
@@ -33,7 +35,7 @@ export default function Settings({ open, onClose, onSaved }: Props) {
 
     async function save() {
         setLoading(true)
-        const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues }
+        const payload = { editorFont, showWordCount, showReadingTime, focusCurrentParagraph, styleIssues, typewriterScrolling }
         const res = await updateSettings(payload)
         setLoading(false)
         if (res && res.ok) {
@@ -82,6 +84,13 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                             <span className="text-sm">Focus current paragraph (dim others)</span>
                         </label>
                         <p className="text-xs text-slate-500 mt-1">Diminishes surrounding text while typing to help you focus on the active paragraph.</p>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={typewriterScrolling} onChange={e => { setTypewriterScrolling(e.target.checked); setDirty(true) }} />
+                            <span className="text-sm">Typewriter scrolling</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">Keeps the caret near the center of the viewport while you type.</p>
                     </div>
                     <div>
                         <label className="flex items-center gap-2">
