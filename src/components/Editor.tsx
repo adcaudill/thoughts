@@ -73,7 +73,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             if (editingNote.id) {
                 stableNoteIdRef.current = editingNote.id
             }
-            const t = editingNote.title || ''
+            // Preserve a locally-typed title if incoming editingNote lacks one for the same logical note
+            const t = (sameLogicalNote && (editingNote.title == null || editingNote.title === '')) ? title : (editingNote.title || '')
             const c = normalizeContent(editingNote.content || '')
 
             // Detect local unsaved work (title or content)
@@ -166,10 +167,12 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             setLoading(true)
             const key = getNoteKey()
             if (!key) { setLoading(false); isSavingRef.current = false; return }
-            // Get the freshest content from CodeMirror to avoid losing last keystrokes
+            // Get the freshest content and title to avoid losing last keystrokes
             const latestContent = normalizeContent(cmViewRef.current ? cmViewRef.current.state.doc.toString() : content)
             if (latestContent !== content) setContent(latestContent)
-            const payload = JSON.stringify({ title, content: latestContent })
+            const latestTitle = (titleRef.current && typeof titleRef.current.value === 'string') ? titleRef.current.value : title
+            if (latestTitle !== title) setTitle(latestTitle)
+            const payload = JSON.stringify({ title: latestTitle, content: latestContent })
             const { ciphertext, nonce } = await encryptNotePayload(key, payload)
             const currentWordCount = (latestContent || '').trim().split(/\s+/).filter(Boolean).length
             const folderToUse = (_opts && Object.prototype.hasOwnProperty.call(_opts, 'folderId')) ? _opts!.folderId : selectedFolder
@@ -209,7 +212,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     throw e
                 }
             }
-            setInitialTitle(title)
+            setInitialTitle(latestTitle)
             setInitialContent(latestContent)
             savedContentRef.current = latestContent
             setDirty(false)

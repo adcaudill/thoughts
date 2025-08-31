@@ -47,7 +47,8 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
             const decrypted = await decryptNotePayload(key, j.note.content_encrypted, j.note.nonce)
             try {
                 const parsed = JSON.parse(decrypted)
-                onSelect({ id: j.note.id, title: parsed.title, content: parsed.content, folder_id: j.note.folder_id })
+                const safeTitle = parsed.title ?? ''
+                onSelect({ id: j.note.id, title: safeTitle, content: parsed.content, folder_id: j.note.folder_id })
             } catch {
                 onSelect({ id: j.note.id, title: '', content: decrypted, folder_id: j.note.folder_id })
             }
