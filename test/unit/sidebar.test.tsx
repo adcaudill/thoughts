@@ -20,7 +20,7 @@ describe('Sidebar', () => {
         vi.resetAllMocks()
     })
 
-    it('renders loading and then folder tree with Inbox', async () => {
+    it('renders loading and then folder tree with Inbox and child', async () => {
         const mockFolders = [
             { id: 'f1', parent_id: null, name_encrypted: '', is_default: 1 },
             { id: 'f2', parent_id: 'f1', name_encrypted: 'Child', is_default: 0 },
@@ -36,6 +36,21 @@ describe('Sidebar', () => {
         expect(await screen.findByText('Inbox')).toBeInTheDocument()
         expect(await screen.findByText('Child')).toBeInTheDocument()
         expect(await screen.findByText('Work')).toBeInTheDocument()
+    })
+
+    it('can start creating a subfolder', async () => {
+        const mockFolders = [
+            { id: 'root', parent_id: null, name_encrypted: 'Root', is_default: 0 },
+        ];
+        const fetchMock = vi.fn()
+        fetchMock.mockResolvedValue({ json: async () => ({ ok: true, folders: mockFolders }) })
+        const G = globalThis as any
+        G.fetch = fetchMock
+        render(<Sidebar noteKey={null} />)
+        const btn = await screen.findByLabelText('new-subfolder-root')
+        btn && btn.click()
+        const subInput = await screen.findByLabelText('new-subfolder-name-root')
+        expect(subInput).toBeInTheDocument()
     })
 
     it('shows error when API fails', async () => {

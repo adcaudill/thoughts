@@ -10,6 +10,7 @@ type Folder = {
     name_encrypted: string
     is_default: number
     goal_word_count?: number | null
+    order?: number
 }
 
 function buildTree(folders: Folder[]) {
@@ -23,6 +24,9 @@ function buildTree(folders: Folder[]) {
             roots.push(f)
         }
     }
+    const byOrder = (a: any, b: any) => (Number(a.order || 0) - Number(b.order || 0)) || String(a.name_encrypted || '').localeCompare(String(b.name_encrypted || ''))
+    roots.sort(byOrder)
+    for (const r of roots) r.children.sort(byOrder)
     return roots
 }
 
@@ -159,6 +163,9 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     const [nameDisplayMap, setNameDisplayMap] = useState<Record<string, string>>({})
     const [goalMap, setGoalMap] = useState<Record<string, string>>({})
     const [folderWordTotals, setFolderWordTotals] = useState<Record<string, number>>({})
+    const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>({})
+    const [newChildName, setNewChildName] = useState<Record<string, string>>({})
+    const [addingChild, setAddingChild] = useState<Record<string, boolean>>({})
 
     function startEditing(id: string, current: string, currentGoal?: number | null) {
         setEditingMap(m => ({ ...m, [id]: true }))
@@ -212,18 +219,81 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
         await loadFolders()
     }
 
+    // Persist collapsed state to localStorage
+    const COLLAPSE_KEY = 'thoughts.sidebar.collapsed'
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(COLLAPSE_KEY)
+            if (raw) {
+                const parsed = JSON.parse(raw)
+                if (parsed && typeof parsed === 'object') {
+                    setCollapsedMap(parsed)
+                }
+            }
+        } catch { /* ignore */ }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+    useEffect(() => {
+        try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsedMap)) } catch { /* ignore */ }
+    }, [collapsedMap])
+    // Prune collapsedMap entries for folders that no longer exist
+    useEffect(() => {
+        if (!folders) return
+        setCollapsedMap(prev => {
+            const ids = new Set(folders.map(f => f.id))
+            let changed = false
+            const out: Record<string, boolean> = {}
+            for (const k of Object.keys(prev)) {
+                if (ids.has(k)) out[k] = prev[k]
+                else changed = true
+            }
+            return changed ? out : prev
+        })
+    }, [folders])
+
+    async function createChildFolder(parentId: string) {
+        const val = (newChildName[parentId] || '').trim()
+        if (!val) return
+        let payloadName = val
+        if (noteKey) {
+            try {
+                const enc = await encryptNotePayload(noteKey, val)
+                payloadName = `${enc.nonce}.${enc.ciphertext}`
+            } catch { payloadName = val }
+        }
+        await offline.createFolder({ parent_id: parentId, name_encrypted: payloadName })
+        setNewChildName(m => ({ ...m, [parentId]: '' }))
+        setAddingChild(m => ({ ...m, [parentId]: false }))
+        await loadFolders()
+        // auto expand the parent to reveal the new child
+        setCollapsedMap(m => ({ ...m, [parentId]: false }))
+    }
+
+    function toggleCollapsed(id: string) {
+        setCollapsedMap(m => ({ ...m, [id]: !m[id] }))
+    }
+
     function renderNode(node: any, depth = 0) {
         const editing = !!editingMap[node.id]
         const name = nameMap[node.id] ?? node.name_encrypted ?? ''
         const displayName = nameDisplayMap[node.id] ?? (node.is_default === 1 ? 'Inbox' : (node.name_encrypted || 'Untitled'))
         const totalWords = folderWordTotals[node.id] || 0
         const goal = node.goal_word_count ?? null
+        const hasChildren = node.children && node.children.length > 0
+        const isCollapsed = !!collapsedMap[node.id]
         return (
             <li key={node.id} className="py-1 px-2 rounded hover:bg-slate-50" style={{ paddingLeft: `${depth * 12}px` }}>
                 <div className="flex items-center justify-between gap-2">
                     {editing ? (
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
+                                {hasChildren ? (
+                                    <button aria-label={`toggle-${node.id}`} className="text-slate-500 hover:text-slate-700 -ml-1 mr-1" onClick={() => toggleCollapsed(node.id)}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.1s' }}>
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+                                ) : <span className="w-4" aria-hidden="true"></span>}
                                 <i className="fa-regular fa-folder text-slate-400 w-4" aria-hidden="true" />
                                 <input
                                     className="border dark:border-slate-800/30 p-1 text-sm w-full"
@@ -280,6 +350,13 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 truncate">
+                            {hasChildren ? (
+                                <button aria-label={`toggle-${node.id}`} className="text-slate-500 hover:text-slate-700 -ml-1" onClick={() => toggleCollapsed(node.id)}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.1s' }}>
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+                            ) : <span className="w-4" aria-hidden="true"></span>}
                             <i className="fa-regular fa-folder text-slate-400 w-4" aria-hidden="true" />
                             {node.is_default === 1 ? (
                                 <button onClick={() => onSelectFolder && onSelectFolder(node.id)} className={`truncate text-left ${selectedFolder === node.id ? 'bg-slate-100 font-semibold rounded px-1' : ''}`} aria-label="inbox">Inbox</button>
@@ -298,10 +375,20 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
                         {!editing && <button aria-label={`rename-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => startEditing(node.id, node.name_encrypted || '', node.goal_word_count ?? null)}><i className="fa-solid fa-pen-to-square" aria-hidden="true" /> <span className="sr-only">rename</span></button>}
                         {editing && <button aria-label={`save-${node.id}`} className="text-xs text-green-600 flex items-center gap-1" onClick={async () => { let payloadName = name; if (noteKey) { try { const enc = await encryptNotePayload(noteKey, name); payloadName = `${enc.nonce}.${enc.ciphertext}` } catch { payloadName = name } } const goalStr = goalMap[node.id]; const goalNum = goalStr === '' ? null : Number(goalStr); await offline.updateFolder(node.id, { name_encrypted: payloadName, goal_word_count: goalNum }); stopEditing(node.id); await loadFolders() }}><i className="fa-solid fa-check" aria-hidden="true" /></button>}
                         {editing && <button aria-label={`cancel-${node.id}`} className="text-xs text-slate-500" onClick={() => stopEditing(node.id)}><i className="fa-solid fa-xmark" aria-hidden="true" /></button>}
+                        {!editing && <button aria-label={`new-subfolder-${node.id}`} className="text-xs text-slate-500 flex items-center gap-1" onClick={() => setAddingChild(m => ({ ...m, [node.id]: !m[node.id] }))}><i className="fa-solid fa-folder-plus" aria-hidden="true" /><span className="sr-only">new subfolder</span></button>}
                         {node.is_default !== 1 && <button aria-label={`delete-${node.id}`} className="text-xs text-red-600 flex items-center gap-1" onClick={async () => { if (!confirm('Delete folder? This will move notes to Inbox.')) return; await offline.deleteFolder(node.id); await loadFolders() }}><i className="fa-solid fa-trash" aria-hidden="true" /></button>}
                     </div>
                 </div>
-                {node.children && node.children.length > 0 && (
+                {addingChild[node.id] && (
+                    <div className="mt-1 pl-6 flex items-center gap-2">
+                        <input aria-label={`new-subfolder-name-${node.id}`} placeholder="Subfolder name" className="border dark:border-slate-800/30 px-2 py-1 text-xs rounded min-w-0" value={newChildName[node.id] || ''} onChange={e => setNewChildName(m => ({ ...m, [node.id]: e.target.value }))} onKeyDown={async (e) => { if (e.key === 'Enter') { e.preventDefault(); await createChildFolder(node.id) } else if (e.key === 'Escape') { setAddingChild(m => ({ ...m, [node.id]: false })) } }} />
+                        <button aria-label={`create-subfolder-${node.id}`} className="bg-slate-800 text-white px-2 py-1 text-xs rounded disabled:opacity-50" disabled={(newChildName[node.id] || '').trim() === ''} onClick={() => createChildFolder(node.id)}>
+                            <i className="fa-solid fa-plus" aria-hidden="true"></i>
+                            <span className="sr-only">Create</span>
+                        </button>
+                    </div>
+                )}
+                {hasChildren && !isCollapsed && (
                     <ul className="mt-1 space-y-1">
                         {node.children.map((c: any) => renderNode(c, depth + 1))}
                     </ul>
@@ -313,8 +400,17 @@ export default function Sidebar({ collapsed, onToggle, noteKey, onSelectFolder, 
     return (
         <div className="p-1 flex flex-col items-stretch max-h-full overflow-auto">
             {!collapsed ? (
-                <div className="flex items-center mb-2 px-2">
+                <div className="flex items-center mb-2 px-2 justify-between">
                     <h2 className="font-medium text-sm tracking-wide text-slate-600">Folders</h2>
+                    <div className="flex items-center gap-1 text-slate-500">
+                        <button aria-label="collapse-all" className="p-1 hover:text-slate-700 text-xs" onClick={() => {
+                            const map: Record<string, boolean> = {}
+                            for (const f of (folders || [])) map[f.id] = true
+                            setCollapsedMap(map)
+                        }}>Collapse all</button>
+                        <span aria-hidden="true">·</span>
+                        <button aria-label="expand-all" className="p-1 hover:text-slate-700 text-xs" onClick={() => setCollapsedMap({})}>Expand all</button>
+                    </div>
                 </div>
             ) : null}
 

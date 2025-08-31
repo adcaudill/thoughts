@@ -21,10 +21,13 @@ export interface ThoughtsDB extends DBSchema {
         key: string
         value: {
             id: string
+            parent_id?: string | null
             name_encrypted: string
             is_default: number
             goal_word_count?: number | null
             server_updated_at?: string | null
+            order?: number
+            created_at?: string
         }
     }
     settings: { key: string; value: any }

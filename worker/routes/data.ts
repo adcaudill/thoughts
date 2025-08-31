@@ -59,7 +59,7 @@ router.get('/api/folders', async request => {
     const userId = await verifyJwtAndGetSub(request, env)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauth' }), { status: 401 })
 
-    const res = await db.prepare('SELECT id, parent_id, name_encrypted, is_default, "order", created_at, goal_word_count FROM folders WHERE user_id = ? ORDER BY "order" ASC').bind(userId).all()
+    const res = await db.prepare('SELECT id, parent_id, name_encrypted, is_default, "order", created_at, goal_word_count, created_at as updated_at FROM folders WHERE user_id = ? ORDER BY "order" ASC').bind(userId).all()
     return new Response(JSON.stringify({ ok: true, folders: res.results || [] }), { status: 200 })
 })
 
@@ -125,6 +125,8 @@ router.delete('/api/folders/:id', async request => {
         await db.prepare('UPDATE notes SET folder_id = ? WHERE folder_id = ?').bind(inboxId, id).run()
     }
 
+    // Reparent any child folders to root (null parent)
+    await db.prepare('UPDATE folders SET parent_id = NULL WHERE parent_id = ? AND user_id = ?').bind(id, userId).run()
     await db.prepare('DELETE FROM folders WHERE id = ?').bind(id).run()
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
 })

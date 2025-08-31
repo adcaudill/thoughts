@@ -153,7 +153,7 @@ export async function getFolders(): Promise<{ ok: boolean; folders: any[] }> {
                     const tx = (await getDB()).transaction('folders', 'readwrite')
                     const store = tx.objectStore('folders')
                     for (const f of res.folders) {
-                        await store.put({ id: f.id, name_encrypted: f.name_encrypted, is_default: Number(f.is_default || 0), goal_word_count: f.goal_word_count ?? null, server_updated_at: f.updated_at || null })
+                        await store.put({ id: f.id, parent_id: f.parent_id ?? null, name_encrypted: f.name_encrypted, is_default: Number(f.is_default || 0), goal_word_count: f.goal_word_count ?? null, server_updated_at: f.updated_at || null, order: f.order ?? 0, created_at: f.created_at })
                     }
                     await tx.done
                     try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
@@ -174,10 +174,12 @@ export async function createFolder(payload: CreateFolderPayload): Promise<{ ok: 
             const db = await getDB()
             await db.put('folders', {
                 id: res.id,
+                parent_id: payload.parent_id ?? null,
                 name_encrypted: payload.name_encrypted,
                 is_default: payload.is_default ? 1 : 0,
                 goal_word_count: payload.goal_word_count ?? null,
                 server_updated_at: new Date().toISOString(),
+                order: payload.order ?? 0,
             })
             try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
         }
@@ -188,10 +190,12 @@ export async function createFolder(payload: CreateFolderPayload): Promise<{ ok: 
         const db = await getDB()
         await db.put('folders', {
             id: clientId,
+            parent_id: payload.parent_id ?? null,
             name_encrypted: payload.name_encrypted,
             is_default: payload.is_default ? 1 : 0,
             goal_word_count: payload.goal_word_count ?? null,
             server_updated_at: null,
+            order: payload.order ?? 0,
         })
         await enqueue('folder.create', { client_id: clientId, ...payload }, null)
         try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
@@ -239,10 +243,28 @@ export async function deleteFolder(id: string): Promise<{ ok: boolean; offline?:
                     n.folder_id = inbox.id
                     await tx.objectStore('notes').put(n)
                 }
+                // reparent child folders to root
+                const fstore = tx.objectStore('folders')
+                const allFolders = await (await getDB()).getAll('folders')
+                for (const f of allFolders as any[]) {
+                    if (f.parent_id === id) {
+                        await fstore.put({ ...f, parent_id: null })
+                    }
+                }
                 await tx.objectStore('folders').delete(id)
                 await tx.done
             } else {
-                await db.transaction('folders', 'readwrite').objectStore('folders').delete(id)
+                // Still delete and reparent children to root if possible
+                const tx = (await getDB()).transaction('folders', 'readwrite')
+                const fstore = tx.objectStore('folders')
+                const allFolders = await (await getDB()).getAll('folders')
+                for (const f of allFolders as any[]) {
+                    if (f.parent_id === id) {
+                        await fstore.put({ ...f, parent_id: null })
+                    }
+                }
+                await fstore.delete(id)
+                await tx.done
             }
             try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
         }
@@ -260,10 +282,27 @@ export async function deleteFolder(id: string): Promise<{ ok: boolean; offline?:
                 n.folder_id = inbox.id
                 await tx.objectStore('notes').put(n)
             }
-            await tx.objectStore('folders').delete(id)
+            // reparent child folders
+            const fstore = tx.objectStore('folders')
+            const allFolders = await (await getDB()).getAll('folders')
+            for (const f of allFolders as any[]) {
+                if (f.parent_id === id) {
+                    await fstore.put({ ...f, parent_id: null })
+                }
+            }
+            await fstore.delete(id)
             await tx.done
         } else {
-            await db.transaction('folders', 'readwrite').objectStore('folders').delete(id)
+            const tx = (await getDB()).transaction('folders', 'readwrite')
+            const fstore = tx.objectStore('folders')
+            const allFolders = await (await getDB()).getAll('folders')
+            for (const f of allFolders as any[]) {
+                if (f.parent_id === id) {
+                    await fstore.put({ ...f, parent_id: null })
+                }
+            }
+            await fstore.delete(id)
+            await tx.done
         }
         await enqueue('folder.delete', { id }, null)
         try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
