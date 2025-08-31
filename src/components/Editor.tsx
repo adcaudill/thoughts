@@ -101,7 +101,10 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     savedContentRef.current = c
                 }
                 setDirty(false)
-                onDirtyChange?.(editingNote.id || '', false)
+                {
+                    const idForDirty = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || ''
+                    onDirtyChange?.(idForDirty, false)
+                }
             }
             if (editingNote.folder_id) {
                 setSelectedFolder(editingNote.folder_id)
@@ -218,7 +221,9 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
             setDirty(false)
             setLastSavedAt(Date.now())
             try { window.dispatchEvent(new Event('note-saved')) } catch { }
-            onDirtyChange?.((editingNote && editingNote.id) || createdIdRef.current || '', false)
+            // Prefer stable refs to avoid stale props in autosave interval
+            const clearedId = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || ''
+            onDirtyChange?.(clearedId, false)
         } finally {
             setLoading(false)
             isSavingRef.current = false
@@ -355,7 +360,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                     setTitle(newTitle)
                     const isDirty = newTitle !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
                     setDirty(isDirty)
-                    onDirtyChange?.(editingNote?.id || '', isDirty)
+                    const idForDirty = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || ''
+                    onDirtyChange?.(idForDirty, isDirty)
                 }}
                 focusMode={focusMode}
                 selectedFolder={selectedFolder}
@@ -366,7 +372,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         prevSelectedFolderRef.current = newFolder
                         const isDirty = title !== initialTitle || normalizeContent(content) !== normalizeContent(initialContent)
                         setDirty(isDirty)
-                        onDirtyChange?.(editingNote?.id || '', isDirty)
+                        const idForDirty = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || ''
+                        onDirtyChange?.(idForDirty, isDirty)
                         handleSave({ folderId: newFolder }).catch(() => { })
                     }
                 }}
@@ -402,7 +409,8 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                             setContent(normalized)
                             const isDirty = title !== initialTitle || normalized !== initialContent
                             setDirty(isDirty)
-                            onDirtyChange?.(editingNote?.id || '', isDirty)
+                            const idForDirty = stableNoteIdRef.current || createdIdRef.current || (editingNote && editingNote.id) || ''
+                            onDirtyChange?.(idForDirty, isDirty)
                         }}
                         theme={EditorView.theme({
                             '.cm-content': { fontFamily: 'inherit' },
