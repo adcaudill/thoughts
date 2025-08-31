@@ -101,7 +101,7 @@ export default function EditorHeader({ title, titleRef, onTitleChange, focusMode
                         aria-expanded={menuOpen}
                         aria-controls="editor-menu"
                     >
-                        ☰
+                        <i className="fa-solid fa-ellipsis-vertical" aria-hidden="true" />
                     </button>
                     {menuOpen && (
                         <div
