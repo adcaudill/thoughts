@@ -4,7 +4,7 @@ import { getNoteKey } from '../lib/session'
 import { decryptNotePayload } from '../lib/crypto'
 import { search as searchIndex, getIndex } from '../lib/search'
 
-type NoteSummary = { id: string; title: string }
+type NoteSummary = { id: string; title: string; displayTitle?: string }
 
 // onSelect receives either a full note object { id, title, content } or at minimum { id }
 export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteIds }: { folderId?: string | undefined; onSelect: (note: { id: string; title?: string; content?: string; folder_id?: string }) => void; refreshSignal?: number; dirtyNoteIds?: Record<string, boolean> }) {
@@ -36,7 +36,11 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
                 }
                 items.push({ id: n.id, title })
             }
-            setNotes(items)
+            // If multiple notes share the same title, append a short id suffix so both are visible/distinguishable
+            const counts: Record<string, number> = {}
+            for (const it of items) counts[it.title] = (counts[it.title] || 0) + 1
+            const annotated = items.map(it => (counts[it.title] > 1 ? { ...it, displayTitle: `${it.title || 'Untitled'} · ${it.id.slice(0, 6)}` } : { ...it, displayTitle: it.title }))
+            setNotes(annotated)
         }
         load()
     }, [refreshSignal, folderId])
@@ -72,7 +76,12 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
                     }
                     out.push({ id: n.id, title })
                 }
-                if (!cancelled) setSearchNotes(out)
+                if (!cancelled) {
+                    const counts: Record<string, number> = {}
+                    for (const it of out) counts[it.title] = (counts[it.title] || 0) + 1
+                    const annotated = out.map(it => (counts[it.title] > 1 ? { ...it, displayTitle: `${it.title || 'Untitled'} · ${it.id.slice(0, 6)}` } : { ...it, displayTitle: it.title }))
+                    setSearchNotes(annotated)
+                }
             } finally {
                 if (!cancelled) setSearching(false)
             }
@@ -108,7 +117,7 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
         <div className="p-2">
             <div className="flex items-center justify-between mb-2 px-1">
                 <h3 className="font-medium text-sm tracking-wide text-slate-600">Notes</h3>
-                <button className="text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100" onClick={() => onSelect({ id: '', title: '', content: '' })} aria-label="new-note">+ New</button>
+                <button className="text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100" onClick={() => onSelect({ id: '', title: '', content: '', folder_id: folderId })} aria-label="new-note">+ New</button>
             </div>
             <div className="mb-2 px-1">
                 <div className="relative">
@@ -139,7 +148,7 @@ export default function NoteList({ folderId, onSelect, refreshSignal, dirtyNoteI
                 {list.map(n => (
                     <li key={n.id} className="py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between" onClick={() => loadAndSelect(n.id)}>
                         <span className="flex items-center gap-2">
-                            <span>{n.title}</span>
+                            <span>{n.displayTitle || n.title}</span>
                         </span>
                         {dirtyNoteIds && dirtyNoteIds[n.id] ? (
                             <span className="h-2 w-2 rounded-full bg-rose-500" title="Unsaved changes" />

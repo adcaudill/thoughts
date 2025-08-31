@@ -183,7 +183,7 @@ export default function App() {
                                 </div>
                                 <div className="flex-1 overflow-auto px-3 py-3">
                                     {!showTrash ? (
-                                        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id) }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '' }); setSelectedNote(undefined) }} />
+                                        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onSelectFolder={(id?: string) => { setSelectedFolder(id) }} selectedFolder={selectedFolder} onCreateNote={() => { setEditingNote({ id: '', title: '', content: '', folder_id: selectedFolder }); setSelectedNote(undefined) }} />
                                     ) : (
                                         <Trash onClose={() => setShowTrash(false)} />
                                     )}
