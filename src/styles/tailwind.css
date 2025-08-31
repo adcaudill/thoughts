@@ -9,7 +9,13 @@ body,
 }
 
 body {
+    /* Keep UI in clean sans by default; editor wrapper overrides for writing */
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Editor wrapper uses the selected monospace/serif/sans stack via inline style; provide a sensible default */
+.editor-cm-wrapper {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 /* CSS variables for light and dark palettes. We keep a neutral grey palette for dark mode. */
@@ -94,6 +100,10 @@ body {
 
     .prose {
         color: rgb(var(--text));
+    }
+
+    .prose p {
+        line-height: 1.7;
     }
 
     .ql-toolbar,

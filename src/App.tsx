@@ -19,7 +19,7 @@ export default function App() {
     const [dirtyNoteIds, setDirtyNoteIds] = useState<Record<string, boolean>>({})
     const [focusMode, setFocusMode] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settings, setSettings] = useState<any>({ editorFont: 'sans-serif', showWordCount: false, showReadingTime: false, focusCurrentParagraph: false, styleIssues: false, typewriterScrolling: false })
+    const [settings, setSettings] = useState<any>({ editorFont: 'mono:jetbrains', showWordCount: false, showReadingTime: false, focusCurrentParagraph: false, styleIssues: false, typewriterScrolling: false })
     const [zenHeaderVisible, setZenHeaderVisible] = useState(true)
     const hideTimerRef = React.useRef<number | null>(null)
     const editorRef = React.useRef<EditorHandle | null>(null)
@@ -34,7 +34,7 @@ export default function App() {
                 const res = await (await import('./lib/api')).getSettings()
                 if (!mounted) return
                 if (res && res.ok) {
-                    setSettings({ editorFont: 'sans-serif', showWordCount: false, showReadingTime: false, focusCurrentParagraph: false, styleIssues: false, typewriterScrolling: false, ...(res.settings || {}) })
+                    setSettings({ editorFont: 'mono:jetbrains', showWordCount: false, showReadingTime: false, focusCurrentParagraph: false, styleIssues: false, typewriterScrolling: false, ...(res.settings || {}) })
                     setAuthed(true)
                 }
             } catch {
@@ -117,7 +117,7 @@ export default function App() {
     }, [focusMode])
 
     return (
-        <div className={`h-screen w-screen ${focusMode ? 'bg-white dark:bg-slate-950' : 'bg-white dark:bg-slate-950'} text-slate-900 dark:text-slate-100 safe-area overflow-hidden`}>
+        <div className={`h-screen w-screen ${focusMode ? 'bg-white dark:bg-slate-950' : 'bg-white dark:bg-slate-950'} text-slate-900 dark:text-slate-100 safe-area overflow-hidden antialiased`}>
             {/* When logged out, keep a minimal landing with auth controls */}
             {!authed ? (
                 <div className="h-full w-full flex flex-col">

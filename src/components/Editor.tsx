@@ -284,10 +284,34 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     }), [dirty, title, content, selectedFolder, editingNote])
 
     function computeFontFamily() {
-        const f = (editorSettings && editorSettings.editorFont) || 'monospace'
-        if (f === 'serif') return 'Georgia, Times New Roman, serif'
-        if (f === 'monospace') return 'ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace'
-        return 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial'
+        const f: string = (editorSettings && editorSettings.editorFont) || 'mono:jetbrains'
+        switch (f) {
+            // Back-compat with older settings values
+            case 'monospace':
+                return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+            case 'serif':
+                return 'Georgia, Cambria, "Times New Roman", Times, serif'
+            case 'sans-serif':
+                return 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+            case 'mono:jetbrains':
+                return '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+            case 'mono:ibm-plex':
+                return '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+            case 'mono:system':
+                return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+            case 'serif:source-serif':
+                return '"Source Serif 4", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif'
+            case 'serif:merriweather':
+                return 'Merriweather, ui-serif, Georgia, Cambria, "Times New Roman", Times, serif'
+            case 'serif:georgia':
+                return 'Georgia, Cambria, "Times New Roman", Times, serif'
+            case 'sans:inter':
+                return 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+            case 'sans:system':
+                return 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+            default:
+                return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+        }
     }
 
     // Detect dark mode and observe root class

@@ -5,7 +5,16 @@ type Props = { open: boolean; onClose: () => void; onSaved?: (settings: any) => 
 
 export default function Settings({ open, onClose, onSaved }: Props) {
     const [loading, setLoading] = useState(false)
-    const [editorFont, setEditorFont] = useState<'sans-serif' | 'serif' | 'monospace'>('sans-serif')
+    type EditorFont =
+        | 'mono:jetbrains'
+        | 'mono:ibm-plex'
+        | 'mono:system'
+        | 'serif:source-serif'
+        | 'serif:merriweather'
+        | 'serif:georgia'
+        | 'sans:inter'
+        | 'sans:system'
+    const [editorFont, setEditorFont] = useState<EditorFont>('mono:jetbrains')
     const [showWordCount, setShowWordCount] = useState(false)
     const [showReadingTime, setShowReadingTime] = useState(false)
     const [dirty, setDirty] = useState(false)
@@ -58,12 +67,23 @@ export default function Settings({ open, onClose, onSaved }: Props) {
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm mb-1">Editor font</label>
-                        <select value={editorFont} onChange={e => { setEditorFont(e.target.value as any); setDirty(true) }} className="border rounded px-2 py-1">
-                            <option value="sans-serif">Sans-serif (default)</option>
-                            <option value="serif">Serif</option>
-                            <option value="monospace">Monospace</option>
+                        <select value={editorFont} onChange={e => { setEditorFont(e.target.value as any); setDirty(true) }} className="border rounded px-2 py-1 w-full">
+                            <optgroup label="Monospace">
+                                <option value="mono:jetbrains">JetBrains Mono (default)</option>
+                                <option value="mono:ibm-plex">IBM Plex Mono</option>
+                                <option value="mono:system">System Monospace (SF Mono/Menlo/Monaco)</option>
+                            </optgroup>
+                            <optgroup label="Serif">
+                                <option value="serif:source-serif">Source Serif</option>
+                                <option value="serif:merriweather">Merriweather</option>
+                                <option value="serif:georgia">Georgia (system)</option>
+                            </optgroup>
+                            <optgroup label="Sans-serif">
+                                <option value="sans:inter">Inter</option>
+                                <option value="sans:system">System Sans (SF/Segoe/Roboto)</option>
+                            </optgroup>
                         </select>
-                        <p className="text-xs text-slate-500 mt-1">Controls the font used inside the editor.</p>
+                        <p className="text-xs text-slate-500 mt-1">Applies to the writing area. UI elements remain in their own fonts.</p>
                     </div>
                     <div>
                         <label className="flex items-center gap-2">

@@ -248,10 +248,21 @@ function validateSettings(obj: any) {
     }
     if (obj.editorFont !== undefined) {
         if (typeof obj.editorFont !== 'string') return { valid: false, error: 'editorFont must be a string' }
+        // normalize legacy values
+        const legacyMap: Record<string, string> = {
+            'monospace': 'mono:system',
+            'serif': 'serif:georgia',
+            'sans-serif': 'sans:system'
+        }
+        const normalized = legacyMap[obj.editorFont] || obj.editorFont
         // limit to a small whitelist to prevent abuse
-        const fonts = ['serif', 'sans-serif', 'monospace']
-        if (!fonts.includes(obj.editorFont)) return { valid: false, error: 'invalid editorFont' }
-        result.editorFont = obj.editorFont
+        const fonts = [
+            'mono:jetbrains', 'mono:ibm-plex', 'mono:system',
+            'serif:source-serif', 'serif:merriweather', 'serif:georgia',
+            'sans:inter', 'sans:system'
+        ]
+        if (!fonts.includes(normalized)) return { valid: false, error: 'invalid editorFont' }
+        result.editorFont = normalized
     }
     if (obj.showWordCount !== undefined) {
         if (typeof obj.showWordCount !== 'boolean') return { valid: false, error: 'showWordCount must be boolean' }
