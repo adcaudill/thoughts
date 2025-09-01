@@ -11,6 +11,7 @@ import EditorHeader from './EditorHeader'
 import EditorStatusBar from './EditorStatusBar'
 import NoteInfoDialog from './NoteInfoDialog'
 import NoteHistoryDialog from './NoteHistoryDialog'
+import { useHtmlPasteToMarkdownExt } from '../hooks/useHtmlPasteToMarkdownExt'
 import { getNoteKey } from '../lib/session'
 import { encryptNotePayload, decryptNotePayload } from '../lib/crypto'
 import { createNote, updateNote, deleteNote as deleteNoteOffline } from '../lib/offlineApi'
@@ -371,6 +372,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
     const focusParagraphExt = useFocusParagraphExt(focusOn, content)
     const typewriterOn = !!(editorSettings && editorSettings.typewriterScrolling)
     const typewriterExt = useTypewriterScrollExt(typewriterOn)
+    const htmlPasteExt = useHtmlPasteToMarkdownExt()
 
     const containerClass = layout === 'immersive'
         ? 'h-full flex flex-col px-6 md:px-10 py-6'
@@ -440,7 +442,7 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
                         value={content}
                         height="100%"
                         basicSetup={{ lineNumbers: false, highlightActiveLine: false }}
-                        extensions={[markdown(), EditorView.lineWrapping, isDark ? cmDarkTheme : cmLightTheme, ...styleIssuesExt, ...focusParagraphExt, ...typewriterExt]}
+                        extensions={[markdown(), EditorView.lineWrapping, isDark ? cmDarkTheme : cmLightTheme, ...styleIssuesExt, ...focusParagraphExt, ...typewriterExt, ...htmlPasteExt]}
                         onCreateEditor={(view: EditorView) => { cmViewRef.current = view }}
                         onChange={(val) => {
                             const normalized = normalizeContent(val)
