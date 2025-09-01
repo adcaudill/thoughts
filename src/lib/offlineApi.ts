@@ -5,6 +5,7 @@
 import * as api from './api'
 import { getDB } from './db'
 import { getNoteKey } from './session'
+import { encryptNotePayload } from './crypto'
 import { upsertIndexDoc, persistIndex } from './search'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -14,6 +15,8 @@ type GetNotesResponse = any
 
 export async function getNotes(folderId?: string, opts?: { trashed?: boolean }): Promise<GetNotesResponse> {
     const db = await getDB()
+    // Repair any notes missing a valid folder assignment so they appear in Inbox
+    try { await repairNotesFolderAssignments() } catch { /* non-fatal */ }
     // Return cached notes immediately
     const tx = db.transaction('notes')
     const store = tx.objectStore('notes')
@@ -50,6 +53,8 @@ export async function getNotes(folderId?: string, opts?: { trashed?: boolean }):
                         })
                     }
                     await txw.done
+                    // After refresh, run repair again in case folders/notes arrived and some notes lacked folder_id
+                    try { await repairNotesFolderAssignments() } catch { }
                     try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
                 }
             } catch {
@@ -63,7 +68,19 @@ export async function getNotes(folderId?: string, opts?: { trashed?: boolean }):
 export async function createNote(payload: any) {
     try {
         const res = await api.createNote(payload)
-        if (res && res.ok) await upsertLocalNoteFromPayload(payload, { server_updated_at: res.updated_at || null, dirty: false })
+        if (res && res.ok) {
+            // Ensure local record has the correct folder_id even if server defaulted it (e.g., to Inbox)
+            // Prefer server-assigned id over any client-provided temporary id
+            const id = (res as any).id || (payload && payload.id)
+            let folderId = payload.folder_id
+            if (!folderId && id) {
+                try {
+                    const fetched = await api.getNote(id)
+                    folderId = fetched && fetched.ok && fetched.note ? fetched.note.folder_id : undefined
+                } catch { /* ignore */ }
+            }
+            await upsertLocalNoteFromPayload({ ...payload, id, folder_id: folderId || payload.folder_id }, { server_updated_at: (res as any)?.updated_at || null, dirty: false })
+        }
         return res
     } catch {
         await upsertLocalNoteFromPayload(payload, { dirty: true, locally_edited_at: now() })
@@ -74,6 +91,23 @@ export async function createNote(payload: any) {
 
 export async function updateNote(id: string, patch: any) {
     try {
+        // Capture a local history snapshot before applying the update (safety net)
+        try {
+            const db = await getDB()
+            const current = await db.get('notes', id)
+            if (current) {
+                const snapshot = { id: current.id, folder_id: current.folder_id, content_encrypted: current.content_encrypted, nonce: current.nonce, word_count: current.word_count, server_updated_at: current.server_updated_at }
+                let enc = { snapshot_encrypted: JSON.stringify(snapshot), nonce: '' }
+                try {
+                    const key = getNoteKey()
+                    if (key) {
+                        const result = await encryptNotePayload(key, JSON.stringify(snapshot))
+                        enc = { snapshot_encrypted: result.ciphertext, nonce: result.nonce }
+                    }
+                } catch { /* keep plaintext fallback */ }
+                await (db as any).add('history', { entity: 'note', entity_id: id, ...enc, created_at: Date.now(), reason: 'autosave' })
+            }
+        } catch { /* non-fatal */ }
         const res = await api.updateNote(id, patch)
         await upsertLocalNoteFromPayload({ id, ...patch }, { dirty: false, server_updated_at: res?.updated_at || null })
         return res
@@ -82,6 +116,21 @@ export async function updateNote(id: string, patch: any) {
         const db = await getDB()
         const current = await db.get('notes', id)
         const base = current?.server_updated_at || null
+        // Also capture a local snapshot when offline (same as online path)
+        try {
+            if (current) {
+                const snapshot = { id: current.id, folder_id: current.folder_id, content_encrypted: current.content_encrypted, nonce: current.nonce, word_count: current.word_count, server_updated_at: current.server_updated_at }
+                let enc = { snapshot_encrypted: JSON.stringify(snapshot), nonce: '' }
+                try {
+                    const key = getNoteKey()
+                    if (key) {
+                        const result = await encryptNotePayload(key, JSON.stringify(snapshot))
+                        enc = { snapshot_encrypted: result.ciphertext, nonce: result.nonce }
+                    }
+                } catch { }
+                await (db as any).add('history', { entity: 'note', entity_id: id, ...enc, created_at: Date.now(), reason: 'autosave' })
+            }
+        } catch { }
         await upsertLocalNoteFromPayload({ id, ...patch }, { dirty: true, locally_edited_at: now() })
         await enqueue('note.update', { id, patch }, base)
         return { ok: true, offline: true }
@@ -156,6 +205,8 @@ export async function getFolders(): Promise<{ ok: boolean; folders: any[] }> {
                         await store.put({ id: f.id, parent_id: f.parent_id ?? null, name_encrypted: f.name_encrypted, is_default: Number(f.is_default || 0), goal_word_count: f.goal_word_count ?? null, server_updated_at: f.updated_at || null, order: f.order ?? 0, created_at: f.created_at })
                     }
                     await tx.done
+                    // Now that folders (including Inbox) are up to date, repair orphan notes
+                    try { await repairNotesFolderAssignments() } catch { }
                     try { window.dispatchEvent(new Event('folders-refreshed')) } catch { }
                 }
             } catch { /* ignore offline */ }
@@ -350,9 +401,18 @@ export async function updateSettings(payload: SettingsPayload): Promise<{ ok: bo
 async function upsertLocalNoteFromPayload(payload: any, extras: Partial<{ dirty: boolean; locally_edited_at: number; server_updated_at: string | null }>) {
     const db = await getDB()
     const n = await db.get('notes', payload.id)
+    // Resolve folder_id, defaulting to local Inbox if none present (prevents hidden notes in folder views)
+    let resolvedFolderId: string = payload.folder_id || n?.folder_id || ''
+    if (!resolvedFolderId) {
+        try {
+            const folders = await db.getAll('folders')
+            const inbox = (folders as any[]).find((x: any) => Number(x.is_default) === 1)
+            if (inbox && inbox.id) resolvedFolderId = inbox.id
+        } catch { /* ignore */ }
+    }
     await db.put('notes', {
         id: payload.id,
-        folder_id: payload.folder_id || n?.folder_id || '',
+        folder_id: resolvedFolderId,
         content_encrypted: payload.content_encrypted || n?.content_encrypted || '',
         nonce: payload.nonce || n?.nonce || '',
         word_count: Number(payload.word_count ?? n?.word_count ?? 0),
@@ -392,4 +452,56 @@ export type LocalNoteRecord = {
 export async function getLocalNote(id: string): Promise<LocalNoteRecord | undefined> {
     const db = await getDB()
     return db.get('notes', id)
+}
+
+// Maintenance: ensure any notes without a valid folder_id are assigned to Inbox locally,
+// and soft-delete exact duplicate notes (same ciphertext + nonce) keeping a canonical record.
+async function repairNotesFolderAssignments() {
+    const db = await getDB()
+    const folders = await db.getAll('folders')
+    if (!folders || folders.length === 0) return
+    const inbox = (folders as any[]).find((x: any) => Number(x.is_default) === 1)
+    if (!inbox || !inbox.id) return
+    const validFolderIds = new Set((folders as any[]).map((f: any) => f.id))
+    const tx = (await getDB()).transaction('notes', 'readwrite')
+    const store = tx.objectStore('notes')
+    const allNotes = await store.getAll()
+    let changed = 0
+    for (const n of allNotes as any[]) {
+        const fid = n.folder_id
+        if (!fid || !validFolderIds.has(fid)) {
+            n.folder_id = inbox.id
+            await store.put(n)
+            changed++
+        }
+    }
+    // Deduplicate by content signature (ciphertext + nonce). Keep server-backed or dirty note.
+    const bySig = new Map<string, any[]>()
+    for (const n of allNotes as any[]) {
+        const sig = `${n.content_encrypted || ''}::${n.nonce || ''}`
+        if (!sig || sig === '::') continue
+        const arr = bySig.get(sig) || []
+        arr.push(n)
+        bySig.set(sig, arr)
+    }
+    for (const [, group] of bySig) {
+        if (!group || group.length <= 1) continue
+        // Pick canonical: prefer one with server_updated_at, then dirty, else first
+        let canonical = group.find(g => !!g.server_updated_at) || group.find(g => !!g.dirty) || group[0]
+        for (const n of group) {
+            if (n.id === canonical.id) continue
+            // Only soft-delete clearly duplicate local-only notes (no server_updated_at and not dirty)
+            if (!n.server_updated_at && !n.dirty && !n.deleted_at) {
+                n.deleted_at = new Date().toISOString()
+                await store.put(n)
+                // Remove from search index if present
+                try { const { deleteIndexDoc } = await import('./search'); deleteIndexDoc(n.id) } catch { }
+                changed++
+            }
+        }
+    }
+    await tx.done
+    if (changed > 0) {
+        try { window.dispatchEvent(new Event('notes-refreshed')) } catch { }
+    }
 }

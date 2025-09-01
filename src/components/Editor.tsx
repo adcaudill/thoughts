@@ -73,7 +73,15 @@ const Editor = React.forwardRef<EditorHandle, EditorProps>(function Editor({ edi
 
         if (editingNote) {
             if (editingNote.id) {
+                // Existing note: track its stable id
                 stableNoteIdRef.current = editingNote.id
+            } else {
+                // Explicit brand-new note (id === ''):
+                // If we were previously on a different note and no create is pending, clear stable id
+                if (!pendingCreateRef.current && prevId && prevId !== '') {
+                    stableNoteIdRef.current = null
+                    createdIdRef.current = null
+                }
             }
             // Preserve a locally-typed title if incoming editingNote lacks one for the same logical note
             const t = (sameLogicalNote && (editingNote.title == null || editingNote.title === '')) ? title : (editingNote.title || '')

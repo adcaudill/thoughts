@@ -18,14 +18,22 @@ export async function flushOutboxOnce() {
                     // Update local note's server_updated_at and clear dirty
                     const noteId = (payload.id as string) || res.id
                     let serverUpdatedAt: string | null = null
+                    let serverFolderId: string | null = null
                     try {
                         const fetched = await api.getNote(noteId)
-                        if (fetched && fetched.ok && fetched.note) serverUpdatedAt = fetched.note.updated_at || null
+                        if (fetched && fetched.ok && fetched.note) {
+                            serverUpdatedAt = fetched.note.updated_at || null
+                            serverFolderId = fetched.note.folder_id || null
+                        }
                     } catch { }
                     const n = await tx.objectStore('notes').get(noteId)
                     if (n) {
                         n.server_updated_at = serverUpdatedAt || n.server_updated_at || new Date().toISOString()
                         n.dirty = false
+                        // If local record lacked folder_id (e.g., created without selected folder), apply server's folder (likely Inbox)
+                        if (!n.folder_id || n.folder_id === '') {
+                            if (serverFolderId) n.folder_id = serverFolderId
+                        }
                         await tx.objectStore('notes').put(n)
                     }
                     await tx.objectStore('outbox').delete(item.id as any)
